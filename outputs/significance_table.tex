@@ -1,0 +1,15 @@
+\begin{table}[htbp]
+\centering
+\caption{Statistical Significance Tests (DynamicFusion vs Baselines)}
+\label{tab:significance}
+\begin{tabular}{lcccc}
+\hline
+Comparison & t p-value & t sig. & Wilcoxon p-value & W sig. \\
+\hline
+DynamicFusion vs LSTM & 1.5867649381107185e-06 & *** & 0.02919546328485012 & * \\
+DynamicFusion vs XGBoost & 0.0 & *** & 0.0 & *** \\
+DynamicFusion vs CatBoost & 7.6104035316431635e-106 & *** & 1.814308030856827e-107 & *** \\
+DynamicFusion vs Stacking & 3.1440890431726076e-74 & *** & 1.3360457483888304e-82 & *** \\
+\hline
+\end{tabular}
+\end{table}

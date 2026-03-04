@@ -1,0 +1,210 @@
+2026-03-02 20:12:55,205 [INFO] - Log: E:\mxc11\Documents\StudyPerformancePrediction\experiment\logs\full_experiment_20260302_201255.log
+2026-03-02 20:12:55,205 [INFO] - Building dataset (synthetic if no data files found)...
+2026-03-02 20:12:55,206 [INFO] - Loading raw tables...
+2026-03-02 20:12:55,206 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentInfo.csv
+2026-03-02 20:12:55,206 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentVle.csv
+2026-03-02 20:12:55,206 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\assessments.csv
+2026-03-02 20:12:55,206 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentAssessment.csv
+2026-03-02 20:12:55,206 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentRegistration.csv
+2026-03-02 20:12:55,206 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\courses.csv
+2026-03-02 20:12:55,206 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\vle.csv
+2026-03-02 20:12:55,206 [WARNING] - No data files found. Generating synthetic data for demonstration.
+2026-03-02 20:12:55,213 [INFO] - Dataset: N=3500, T=20, D=4, F=18
+2026-03-02 20:12:55,213 [INFO] - ============================================================
+2026-03-02 20:12:55,213 [INFO] - EXPERIMENT 1: Standard Model Comparison
+2026-03-02 20:12:55,213 [INFO] - ============================================================
+2026-03-02 20:12:55,214 [INFO] - Training LSTM / MLP-surrogate...
+2026-03-02 20:12:58,237 [INFO] - [LSTM] Epoch 10: train=59.1465, val=54.0176
+2026-03-02 20:12:59,786 [INFO] - [LSTM] Epoch 20: train=58.7005, val=54.1562
+2026-03-02 20:12:59,939 [INFO] - Early stopping at epoch 21
+2026-03-02 20:12:59,964 [INFO] - LSTM: {'RMSE': 7.434256076812744, 'MAE': 6.205043792724609, 'R2': -0.0007585287094116211}
+2026-03-02 20:12:59,964 [INFO] - Training XGBoost / GBM...
+2026-03-02 20:13:00,333 [INFO] - [XGBoost] Training complete.
+2026-03-02 20:13:00,340 [INFO] - XGBoost: {'RMSE': 7.745998382568359, 'MAE': 6.4734416007995605, 'R2': -0.0864483118057251}
+2026-03-02 20:13:00,340 [INFO] - Training CatBoost / RF...
+2026-03-02 20:13:00,946 [INFO] - [CatBoost] Training complete.
+2026-03-02 20:13:00,951 [INFO] - CatBoost: {'RMSE': 7.622619184503773, 'MAE': 6.417034762878957, 'R2': -0.0521138000005783}
+2026-03-02 20:13:00,951 [INFO] - Training Stacking Fusion...
+2026-03-02 20:13:01,035 [INFO] - Stacking: {'RMSE': 7.962045012341081, 'MAE': 6.583177563366705, 'R2': -0.14789860176653025}
+2026-03-02 20:13:01,035 [INFO] - Training Dynamic Fusion...
+2026-03-02 20:13:01,307 [INFO] - [DynamicFusion] Epoch 10: loss=6.7698
+2026-03-02 20:13:01,529 [INFO] - [DynamicFusion] Epoch 20: loss=5.5460
+2026-03-02 20:13:01,789 [INFO] - [DynamicFusion] Epoch 30: loss=5.5494
+2026-03-02 20:13:01,789 [INFO] - DynamicFusion: {'RMSE': 7.744595527648926, 'MAE': 6.472822189331055, 'R2': -0.08605480194091797}
+2026-03-02 20:13:01,805 [INFO] - Results saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\outputs\standard_comparison_results.csv
+2026-03-02 20:13:02,556 [INFO] - Comparison plot saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\figures\comparison_RMSE.png
+2026-03-02 20:13:02,693 [INFO] - Comparison plot saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\figures\comparison_MAE.png
+2026-03-02 20:13:02,881 [INFO] - Comparison plot saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\figures\comparison_R2.png
+2026-03-02 20:13:02,884 [INFO] - LaTeX table saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\outputs\main_results.tex
+2026-03-02 20:13:02,885 [INFO] - ============================================================
+2026-03-02 20:13:02,885 [INFO] - EXPERIMENT 2: Early Prediction
+2026-03-02 20:13:02,885 [INFO] - ============================================================
+2026-03-02 20:13:02,885 [INFO] - --- Window: week4 ---
+2026-03-02 20:13:02,885 [INFO] - Loading raw tables...
+2026-03-02 20:13:02,885 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentInfo.csv
+2026-03-02 20:13:02,885 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentVle.csv
+2026-03-02 20:13:02,885 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\assessments.csv
+2026-03-02 20:13:02,885 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentAssessment.csv
+2026-03-02 20:13:02,885 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentRegistration.csv
+2026-03-02 20:13:02,885 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\courses.csv
+2026-03-02 20:13:02,885 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\vle.csv
+2026-03-02 20:13:02,885 [WARNING] - No data files found. Generating synthetic data for demonstration.
+2026-03-02 20:13:04,403 [INFO] - [LSTM] Epoch 10: train=59.1465, val=54.0176
+2026-03-02 20:13:05,861 [INFO] - [LSTM] Epoch 20: train=58.7005, val=54.1562
+2026-03-02 20:13:06,008 [INFO] - Early stopping at epoch 21
+2026-03-02 20:13:06,263 [INFO] - [XGBoost] Training complete.
+2026-03-02 20:13:06,674 [INFO] - [CatBoost] Training complete.
+2026-03-02 20:13:06,676 [INFO] -   week4: {'LSTM': {'RMSE': 7.434256076812744, 'MAE': 6.205043792724609, 'R2': -0.0007585287094116211}, 'XGBoost': {'RMSE': 7.745998382568359, 'MAE': 6.4734416007995605, 'R2': -0.0864483118057251}, 'CatBoost': {'RMSE': 7.622619184503773, 'MAE': 6.417034762878957, 'R2': -0.0521138000005783}}
+2026-03-02 20:13:06,676 [INFO] - --- Window: week8 ---
+2026-03-02 20:13:06,676 [INFO] - Loading raw tables...
+2026-03-02 20:13:06,676 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentInfo.csv
+2026-03-02 20:13:06,676 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentVle.csv
+2026-03-02 20:13:06,677 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\assessments.csv
+2026-03-02 20:13:06,677 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentAssessment.csv
+2026-03-02 20:13:06,677 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentRegistration.csv
+2026-03-02 20:13:06,677 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\courses.csv
+2026-03-02 20:13:06,677 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\vle.csv
+2026-03-02 20:13:06,677 [WARNING] - No data files found. Generating synthetic data for demonstration.
+2026-03-02 20:13:08,331 [INFO] - [LSTM] Epoch 10: train=59.1465, val=54.0176
+2026-03-02 20:13:09,985 [INFO] - [LSTM] Epoch 20: train=58.7005, val=54.1562
+2026-03-02 20:13:10,149 [INFO] - Early stopping at epoch 21
+2026-03-02 20:13:10,404 [INFO] - [XGBoost] Training complete.
+2026-03-02 20:13:10,822 [INFO] - [CatBoost] Training complete.
+2026-03-02 20:13:10,824 [INFO] -   week8: {'LSTM': {'RMSE': 7.434256076812744, 'MAE': 6.205043792724609, 'R2': -0.0007585287094116211}, 'XGBoost': {'RMSE': 7.745998382568359, 'MAE': 6.4734416007995605, 'R2': -0.0864483118057251}, 'CatBoost': {'RMSE': 7.622619184503773, 'MAE': 6.417034762878957, 'R2': -0.0521138000005783}}
+2026-03-02 20:13:10,824 [INFO] - --- Window: full ---
+2026-03-02 20:13:10,824 [INFO] - Loading raw tables...
+2026-03-02 20:13:10,824 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentInfo.csv
+2026-03-02 20:13:10,824 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentVle.csv
+2026-03-02 20:13:10,824 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\assessments.csv
+2026-03-02 20:13:10,825 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentAssessment.csv
+2026-03-02 20:13:10,825 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\studentRegistration.csv
+2026-03-02 20:13:10,825 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\courses.csv
+2026-03-02 20:13:10,825 [WARNING] - File not found: E:\mxc11\Documents\StudyPerformancePrediction\experiment\data\vle.csv
+2026-03-02 20:13:10,825 [WARNING] - No data files found. Generating synthetic data for demonstration.
+2026-03-02 20:13:12,581 [INFO] - [LSTM] Epoch 10: train=59.1465, val=54.0176
+2026-03-02 20:13:14,502 [INFO] - [LSTM] Epoch 20: train=58.7005, val=54.1562
+2026-03-02 20:13:14,680 [INFO] - Early stopping at epoch 21
+2026-03-02 20:13:14,940 [INFO] - [XGBoost] Training complete.
+2026-03-02 20:13:15,379 [INFO] - [CatBoost] Training complete.
+2026-03-02 20:13:15,381 [INFO] -   full: {'LSTM': {'RMSE': 7.434256076812744, 'MAE': 6.205043792724609, 'R2': -0.0007585287094116211}, 'XGBoost': {'RMSE': 7.745998382568359, 'MAE': 6.4734416007995605, 'R2': -0.0864483118057251}, 'CatBoost': {'RMSE': 7.622619184503773, 'MAE': 6.417034762878957, 'R2': -0.0521138000005783}}
+2026-03-02 20:13:15,523 [INFO] - Early prediction curve saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\figures\early_prediction_RMSE.png
+2026-03-02 20:13:15,653 [INFO] - Early prediction curve saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\figures\early_prediction_R2.png
+2026-03-02 20:13:15,656 [INFO] - LaTeX table saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\outputs\early_prediction_table.tex
+2026-03-02 20:13:15,657 [INFO] - ============================================================
+2026-03-02 20:13:15,657 [INFO] - EXPERIMENT 3: LOMO Transfer Learning
+2026-03-02 20:13:15,657 [INFO] - ============================================================
+2026-03-02 20:13:15,663 [INFO] - LOMO split: test=AAA, train_n=3000, test_n=500
+2026-03-02 20:13:15,663 [INFO] - LOMO split: test=BBB, train_n=3000, test_n=500
+2026-03-02 20:13:15,664 [INFO] - LOMO split: test=CCC, train_n=3000, test_n=500
+2026-03-02 20:13:15,664 [INFO] - LOMO split: test=DDD, train_n=3000, test_n=500
+2026-03-02 20:13:15,665 [INFO] - LOMO split: test=EEE, train_n=3000, test_n=500
+2026-03-02 20:13:15,665 [INFO] - LOMO split: test=FFF, train_n=3000, test_n=500
+2026-03-02 20:13:15,666 [INFO] - LOMO split: test=GGG, train_n=3000, test_n=500
+2026-03-02 20:13:15,915 [INFO] - [XGBoost] Training complete.
+2026-03-02 20:13:16,367 [INFO] - [CatBoost] Training complete.
+2026-03-02 20:13:18,302 [INFO] - [LSTM] Epoch 10: train=56.7779, val=48.2349
+2026-03-02 20:13:20,223 [INFO] - [LSTM] Epoch 20: train=57.3687, val=48.2520
+2026-03-02 20:13:21,162 [INFO] - Early stopping at epoch 25
+2026-03-02 20:13:21,169 [INFO] -   Module AAA: {'XGBoost': {'RMSE': 7.582018852233887, 'MAE': 6.1715240478515625, 'R2': -0.06414556503295898}, 'CatBoost': {'RMSE': 7.468789264259126, 'MAE': 6.062023020934554, 'R2': -0.03259914893376048}, 'LSTM': {'RMSE': 7.3530755043029785, 'MAE': 5.927967548370361, 'R2': -0.0008509159088134766}}
+2026-03-02 20:13:21,421 [INFO] - [XGBoost] Training complete.
+2026-03-02 20:13:21,859 [INFO] - [CatBoost] Training complete.
+2026-03-02 20:13:23,773 [INFO] - [LSTM] Epoch 10: train=56.3173, val=48.2361
+2026-03-02 20:13:24,562 [INFO] - Early stopping at epoch 14
+2026-03-02 20:13:24,569 [INFO] -   Module BBB: {'XGBoost': {'RMSE': 7.723976135253906, 'MAE': 6.296459674835205, 'R2': -0.08067715167999268}, 'CatBoost': {'RMSE': 7.570251940612999, 'MAE': 6.1786461863994475, 'R2': -0.03808954126139663}, 'LSTM': {'RMSE': 7.43688440322876, 'MAE': 6.033093452453613, 'R2': -0.0018349885940551758}}
+2026-03-02 20:13:24,828 [INFO] - [XGBoost] Training complete.
+2026-03-02 20:13:25,297 [INFO] - [CatBoost] Training complete.
+2026-03-02 20:13:27,223 [INFO] - [LSTM] Epoch 10: train=57.6112, val=48.2348
+2026-03-02 20:13:29,063 [INFO] - [LSTM] Epoch 20: train=57.0488, val=48.2320
+2026-03-02 20:13:30,907 [INFO] - [LSTM] Epoch 30: train=57.7483, val=48.2334
+2026-03-02 20:13:32,008 [INFO] - Early stopping at epoch 36
+2026-03-02 20:13:32,012 [INFO] -   Module CCC: {'XGBoost': {'RMSE': 7.624030590057373, 'MAE': 6.205350875854492, 'R2': -0.061328887939453125}, 'CatBoost': {'RMSE': 7.434608538785651, 'MAE': 6.0863633201270675, 'R2': -0.009245799501898189}, 'LSTM': {'RMSE': 7.406195640563965, 'MAE': 6.019079685211182, 'R2': -0.0015465021133422852}}
+2026-03-02 20:13:32,247 [INFO] - [XGBoost] Training complete.
+2026-03-02 20:13:32,696 [INFO] - [CatBoost] Training complete.
+2026-03-02 20:13:34,792 [INFO] - [LSTM] Epoch 10: train=56.8495, val=48.2334
+2026-03-02 20:13:36,897 [INFO] - [LSTM] Epoch 20: train=55.6014, val=48.2350
+2026-03-02 20:13:39,030 [INFO] - [LSTM] Epoch 30: train=56.4902, val=48.2298
+2026-03-02 20:13:40,846 [INFO] - [LSTM] Epoch 40: train=59.1858, val=48.2293
+2026-03-02 20:13:42,702 [INFO] - [LSTM] Epoch 50: train=56.3719, val=48.2293
+2026-03-02 20:13:42,706 [INFO] -   Module DDD: {'XGBoost': {'RMSE': 8.046340942382812, 'MAE': 6.608807563781738, 'R2': -0.08812642097473145}, 'CatBoost': {'RMSE': 7.836365009186598, 'MAE': 6.428874303592664, 'R2': -0.032076437325683216}, 'LSTM': {'RMSE': 7.739876747131348, 'MAE': 6.290985584259033, 'R2': -0.006817221641540527}}
+2026-03-02 20:13:42,958 [INFO] - [XGBoost] Training complete.
+2026-03-02 20:13:43,414 [INFO] - [CatBoost] Training complete.
+2026-03-02 20:13:45,193 [INFO] - [LSTM] Epoch 10: train=57.2753, val=48.2383
+2026-03-02 20:13:46,792 [INFO] - Early stopping at epoch 19
+2026-03-02 20:13:46,798 [INFO] -   Module EEE: {'XGBoost': {'RMSE': 8.104340553283691, 'MAE': 6.69390344619751, 'R2': -0.07227444648742676}, 'CatBoost': {'RMSE': 7.931412177931452, 'MAE': 6.568050110384347, 'R2': -0.02700279607927114}, 'LSTM': {'RMSE': 7.879497528076172, 'MAE': 6.516839504241943, 'R2': -0.013602495193481445}}
+2026-03-02 20:13:47,048 [INFO] - [XGBoost] Training complete.
+2026-03-02 20:13:47,507 [INFO] - [CatBoost] Training complete.
+2026-03-02 20:13:49,352 [INFO] - [LSTM] Epoch 10: train=58.1550, val=48.2345
+2026-03-02 20:13:51,218 [INFO] - [LSTM] Epoch 20: train=58.2238, val=48.2295
+2026-03-02 20:13:53,299 [INFO] - [LSTM] Epoch 30: train=56.8807, val=48.2262
+2026-03-02 20:13:55,604 [INFO] - [LSTM] Epoch 40: train=58.8434, val=48.2277
+2026-03-02 20:13:55,867 [INFO] - Early stopping at epoch 41
+2026-03-02 20:13:55,875 [INFO] -   Module FFF: {'XGBoost': {'RMSE': 7.714835166931152, 'MAE': 6.378050804138184, 'R2': -0.048038363456726074}, 'CatBoost': {'RMSE': 7.537202172640258, 'MAE': 6.2057891275085115, 'R2': -0.00033213100060081047}, 'LSTM': {'RMSE': 7.549560546875, 'MAE': 6.189233303070068, 'R2': -0.003615140914916992}}
+2026-03-02 20:13:56,201 [INFO] - [XGBoost] Training complete.
+2026-03-02 20:13:56,731 [INFO] - [CatBoost] Training complete.
+2026-03-02 20:13:59,179 [INFO] - [LSTM] Epoch 10: train=59.0290, val=61.7279
+2026-03-02 20:13:59,919 [INFO] - Early stopping at epoch 13
+2026-03-02 20:13:59,926 [INFO] -   Module GGG: {'XGBoost': {'RMSE': 7.354872703552246, 'MAE': 6.263816833496094, 'R2': -0.07635235786437988}, 'CatBoost': {'RMSE': 7.212775163546939, 'MAE': 6.1248338007257335, 'R2': -0.035163388821842334}, 'LSTM': {'RMSE': 7.125012397766113, 'MAE': 6.0963006019592285, 'R2': -0.01012563705444336}}
+2026-03-02 20:14:00,182 [INFO] - Transfer plot saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\figures\lomo_transfer_RMSE.png
+2026-03-02 20:14:00,184 [INFO] - LaTeX table saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\outputs\lomo_table.tex
+2026-03-02 20:14:00,200 [INFO] - LOMO Summary:
+              RMSE                 MAE                  R2          
+              mean       std      mean       std      mean       std
+Model                                                               
+CatBoost  7.570201  0.244550  6.236369  0.190033 -0.024930  0.014394
+LSTM      7.498586  0.251325  6.153357  0.199540 -0.005485  0.004882
+XGBoost   7.735774  0.262705  6.373988  0.202106 -0.070135  0.013415
+2026-03-02 20:14:00,202 [INFO] - ============================================================
+2026-03-02 20:14:00,203 [INFO] - EXPERIMENT 4: MAML Meta-Learning
+2026-03-02 20:14:00,203 [INFO] - ============================================================
+2026-03-02 20:14:00,203 [INFO] - Meta task: module=AAA, n=500
+2026-03-02 20:14:00,203 [INFO] - Meta task: module=BBB, n=500
+2026-03-02 20:14:00,203 [INFO] - Meta task: module=CCC, n=500
+2026-03-02 20:14:00,203 [INFO] - Meta task: module=DDD, n=500
+2026-03-02 20:14:00,203 [INFO] - Meta task: module=EEE, n=500
+2026-03-02 20:14:00,203 [INFO] - Meta task: module=FFF, n=500
+2026-03-02 20:14:00,203 [INFO] - Meta task: module=GGG, n=500
+2026-03-02 20:14:00,205 [INFO] - Starting MAML training for 100 epochs...
+2026-03-02 20:14:00,649 [INFO] - [MAML] Epoch 20: meta_loss=64.7575
+2026-03-02 20:14:01,060 [INFO] - [MAML] Epoch 40: meta_loss=63.8967
+2026-03-02 20:14:01,470 [INFO] - [MAML] Epoch 60: meta_loss=60.6102
+2026-03-02 20:14:01,881 [INFO] - [MAML] Epoch 80: meta_loss=61.7480
+2026-03-02 20:14:02,310 [INFO] - [MAML] Epoch 100: meta_loss=98.3460
+2026-03-02 20:14:02,323 [INFO] -   MAML AAA: {'RMSE': 7.377408027648926, 'MAE': 6.069459915161133, 'R2': -0.03243076801300049}
+2026-03-02 20:14:02,334 [INFO] -   MAML BBB: {'RMSE': 7.692671775817871, 'MAE': 6.078652381896973, 'R2': -0.04426229000091553}
+2026-03-02 20:14:02,344 [INFO] -   MAML CCC: {'RMSE': 6.982282638549805, 'MAE': 5.613292694091797, 'R2': -0.07828414440155029}
+2026-03-02 20:14:02,354 [INFO] -   MAML DDD: {'RMSE': 8.496330261230469, 'MAE': 6.714416027069092, 'R2': -0.05624735355377197}
+2026-03-02 20:14:02,364 [INFO] -   MAML EEE: {'RMSE': 7.512475967407227, 'MAE': 6.333355903625488, 'R2': 0.030604541301727295}
+2026-03-02 20:14:02,374 [INFO] -   MAML FFF: {'RMSE': 8.139302253723145, 'MAE': 6.637350559234619, 'R2': -0.014601469039916992}
+2026-03-02 20:14:02,384 [INFO] -   MAML GGG: {'RMSE': 7.075525283813477, 'MAE': 6.169264316558838, 'R2': -0.07850456237792969}
+2026-03-02 20:14:02,389 [INFO] - LaTeX table saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\outputs\maml_table.tex
+2026-03-02 20:14:02,389 [INFO] - MAML mean RMSE: 7.6109 ¡À 0.5501
+2026-03-02 20:14:02,391 [INFO] - ============================================================
+2026-03-02 20:14:02,391 [INFO] - EXPERIMENT 5: Statistical Significance Tests
+2026-03-02 20:14:02,391 [INFO] - ============================================================
+2026-03-02 20:14:02,400 [INFO] - 
+                  comparison  t_pvalue  t_significant t_label  w_pvalue  w_significant w_label
+0      DynamicFusion vs LSTM  0.001557           True      **  0.002354           True      **
+1   DynamicFusion vs XGBoost  0.192219          False      ns  0.004006           True      **
+2  DynamicFusion vs CatBoost  0.362189          False      ns  0.461517          False      ns
+3  DynamicFusion vs Stacking  0.002721           True      **  0.007721           True      **
+2026-03-02 20:14:02,401 [INFO] - Significance report saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\outputs\significance_tests.csv
+2026-03-02 20:14:02,403 [INFO] - LaTeX table saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\outputs\significance_table.tex
+2026-03-02 20:14:02,403 [INFO] - ============================================================
+2026-03-02 20:14:02,403 [INFO] - EXPERIMENT 6: SHAP Interpretability
+2026-03-02 20:14:02,403 [INFO] - ============================================================
+2026-03-02 20:14:02,510 [WARNING] - SHAP library unavailable. Using feature_importances_ as fallback.
+2026-03-02 20:14:02,517 [INFO] - Top features (feature importance):
+            feature  mean_abs_shap
+15     imd_band_enc       0.067702
+16     age_band_enc       0.065294
+10  studied_credits       0.064428
+13       region_enc       0.063742
+12       gender_enc       0.062994
+2026-03-02 20:14:02,738 [INFO] - Feature importance plot saved: E:\mxc11\Documents\StudyPerformancePrediction\experiment\figures\feature_importance.png
+2026-03-02 20:14:02,871 [INFO] - 
+============================================================
+2026-03-02 20:14:02,871 [INFO] - ALL EXPERIMENTS COMPLETE
+2026-03-02 20:14:02,871 [INFO] - ============================================================
+2026-03-02 20:14:02,888 [INFO] - 
+Outputs: E:\mxc11\Documents\StudyPerformancePrediction\experiment\outputs
+2026-03-02 20:14:02,889 [INFO] - Figures: E:\mxc11\Documents\StudyPerformancePrediction\experiment\figures

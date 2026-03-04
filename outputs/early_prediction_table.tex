@@ -1,0 +1,20 @@
+\begin{table}[htbp]
+\centering
+\caption{Early Prediction Across Temporal Windows}
+\label{tab:early}
+\begin{tabular}{lcccc}
+\hline
+Window & Model & RMSE & MAE & R2 \\
+\hline
+week4 & LSTM & 22.6713 & 19.3264 & -0.0005 \\
+week4 & XGBoost & 18.6717 & 14.1778 & 0.3214 \\
+week4 & CatBoost & 18.5609 & 14.0819 & 0.3294 \\
+week8 & LSTM & 17.0432 & 12.9509 & 0.4299 \\
+week8 & XGBoost & 16.6492 & 11.8556 & 0.4559 \\
+week8 & CatBoost & 16.5720 & 11.8495 & 0.4610 \\
+full & LSTM & \textbf{10.7924} & \textbf{7.1267} & \textbf{0.7721} \\
+full & XGBoost & 12.1440 & 7.9695 & 0.7115 \\
+full & CatBoost & 12.3082 & 8.1611 & 0.7036 \\
+\hline
+\end{tabular}
+\end{table}

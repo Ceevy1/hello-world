@@ -1,0 +1,16 @@
+\begin{table}[htbp]
+\centering
+\caption{Performance Comparison of All Models on OULAD Dataset}
+\label{tab:main_results}
+\begin{tabular}{lccc}
+\hline
+Model & RMSE & MAE & R2 \\
+\hline
+LSTM & 7.6601 & 6.3995 & -0.0625 \\
+XGBoost & 7.6864 & 6.4200 & -0.0698 \\
+CatBoost & \textbf{7.4960} & \textbf{6.3102} & \textbf{-0.0174} \\
+Stacking & 8.3965 & 6.8561 & -0.2766 \\
+DynamicFusion & 8.3422 & 6.8324 & -0.2601 \\
+\hline
+\end{tabular}
+\end{table}
