@@ -91,6 +91,8 @@ These scripts generate extended evidence files under `outputs/` including: `main
 
 > Note: this project stores text artifacts only in version control, so loss curves are exported as CSV series in `outputs/loss_curves/*.csv` instead of binary images.
 
+> CUDA acceleration is enabled automatically when available (PyTorch LSTM/HAFM + XGBoost/CatBoost GPU backends with safe CPU fallback).
+
 ### Run individual experiments
 
 ```python
