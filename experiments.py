@@ -1,7 +1,7 @@
 """
 Experiment Runner
 Orchestrates all experiments:
-  1. Standard model comparison (LSTM, XGB, CatBoost, Fusion)
+  1. Standard model comparison (LSTM, XGB, CatBoost, Baselines, Fusion)
   2. Early prediction (week4, week8, full)
   3. LOMO transfer learning
   4. MAML meta-learning
@@ -39,6 +39,7 @@ from models import (
     LSTMTrainer, XGBoostModel, CatBoostModel,
     DynamicFusionTrainer, StackingFusion, MAMLTrainer
 )
+from models.baselines import BaselineSuite, fit_predict_baselines
 from evaluation import (
     compute_regression_metrics, compute_classification_metrics,
     SignificanceTester, SHAPAnalyzer, ResultsReporter
@@ -62,7 +63,7 @@ def setup_file_logging(experiment_name: str):
 # ============================================================
 def run_standard_comparison(dataset: Dict, reporter: ResultsReporter) -> Dict:
     """
-    Train LSTM, XGB, CatBoost, Stacking, and DynamicFusion.
+    Train LSTM, XGB, CatBoost, all classic baselines, Stacking, and DynamicFusion.
     Evaluate on test set. Return predictions and metrics.
     """
     logger.info("=" * 60)
@@ -115,6 +116,19 @@ def run_standard_comparison(dataset: Dict, reporter: ResultsReporter) -> Dict:
     predictions["CatBoost"] = pred_cat
     cat_model.save(os.path.join(MODEL_DIR, "catboost.pkl"))
     logger.info(f"CatBoost: {results['CatBoost']}")
+
+    # --- Classic Baseline Models (tabular) ---
+    logger.info("Training classic baseline suite...")
+    baseline_preds = fit_predict_baselines(
+        X_tab_train,
+        y_train,
+        X_tab_test,
+        suite=BaselineSuite(random_state=SEED),
+    )
+    for name, pred in baseline_preds.items():
+        results[name] = compute_regression_metrics(y_test, pred)
+        predictions[name] = pred
+        logger.info(f"{name}: {results[name]}")
 
     # --- Stacking Fusion ---
     logger.info("Training Stacking Fusion...")
