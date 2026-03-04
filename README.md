@@ -192,11 +192,15 @@ models/lstm.py
 models/xgb.py
 models/cat.py
 models/hafm.py
+models/baselines.py
+models/__init__.py   # includes legacy import compatibility
 loss/unified_loss.py
 train/train_full.py
 train/train_lomo.py
+train/train_baselines.py
 evaluation/metrics.py
 evaluation/statistics.py
+evaluation/__init__.py  # includes legacy import compatibility
 explain/shap_analysis.py
 run_all.py
 ```
