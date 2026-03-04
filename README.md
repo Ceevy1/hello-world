@@ -77,6 +77,20 @@ cd oulad_project
 python experiments.py
 ```
 
+
+### PRD-aligned automation scripts
+
+```bash
+python run_full.py
+python run_lomo.py
+python run_ablation.py
+python run_lambda_search.py
+```
+
+These scripts generate extended evidence files under `outputs/` including: `main_results.csv`, `lomo_results.csv`, `ablation_results.csv`, `lambda_sensitivity.csv`, `weight_distribution.csv`, `diversity_matrix.csv`, `transfer_distance.csv`, and `shap_rank_correlation.csv`.
+
+> Note: this project stores text artifacts only in version control, so loss curves are exported as CSV series in `outputs/loss_curves/*.csv` instead of binary images.
+
 ### Run individual experiments
 
 ```python
