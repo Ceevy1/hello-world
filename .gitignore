@@ -1,0 +1,10 @@
+# Python caches
+__pycache__/
+*.pyc
+
+# Generated binary artifacts are not allowed in this project
+outputs/**/*.png
+outputs/**/*.jpg
+outputs/**/*.jpeg
+outputs/**/*.gif
+outputs/**/*.pdf
