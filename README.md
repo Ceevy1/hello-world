@@ -179,3 +179,30 @@ If you use this code in your research, please cite:
 ## License
 
 For academic research use only.
+
+---
+
+## MT-HAFNet Modular Scaffold (New)
+
+A PRD-aligned modular implementation is also provided:
+
+```
+preprocess/data_builder.py
+models/lstm.py
+models/xgb.py
+models/cat.py
+models/hafm.py
+loss/unified_loss.py
+train/train_full.py
+train/train_lomo.py
+evaluation/metrics.py
+evaluation/statistics.py
+explain/shap_analysis.py
+run_all.py
+```
+
+Smoke run:
+
+```bash
+python run_all.py
+```
