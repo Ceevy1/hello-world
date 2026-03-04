@@ -1,0 +1,4 @@
+model_weight,corr_with_error
+w_lstm,0.1180454501535664
+w_xgb,-0.25577311796619867
+w_cat,0.24923096519690763
