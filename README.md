@@ -226,3 +226,29 @@ Smoke run:
 ```bash
 python run_all.py
 ```
+
+
+## Junyi 精细化行为权重分析模块（新增）
+
+为避免影响原有 OULAD 训练流程，新增了独立的 Junyi 模块：
+
+- `junyi/dataloader.py`：
+  - 按 `user_id + timestamp` 构建行为序列
+  - `MAX_SEQ_LEN` 截断/补齐
+  - 多模态输入：`exercise`、`correct`、`elapsed_time/hint_used`
+  - 可选根据 `junyi_Exercise_table.csv` 构建先修关系邻接矩阵
+- `src/models/dynamic_junyi.py`：
+  - 动态权重生成器（时间注意力）
+  - 可选图融合门控单元（行为 vs 知识图）
+  - 统一优化目标：`BCE + λ * attention_regularization`
+- `experiments/exp_generalization.py`：按习题ID 80/20 未见迁移划分，输出 Accuracy/AUC
+- `experiments/exp_robustness.py`：测试集噪声注入（标签翻转/耗时置零），输出性能衰减
+- `experiments/vis_weights.py`：导出注意力权重并绘制热力图
+
+示例：
+
+```bash
+python experiments/exp_generalization.py --log_csv data/junyi_ProblemLog_original.csv --exercise_csv data/junyi_Exercise_table.csv
+python experiments/exp_robustness.py --log_csv data/junyi_ProblemLog_original.csv
+python experiments/vis_weights.py --log_csv data/junyi_ProblemLog_original.csv --sample_idx 0
+```
