@@ -64,6 +64,43 @@ def _synthetic_junyi(path: Path, n_users: int = 120, n_ex: int = 60, n_steps: in
     return out
 
 
+
+def _resolve_junyi_paths(log_csv_arg: str | None, exercise_csv_arg: str | None) -> tuple[Path | None, Path | None, list[str]]:
+    """Resolve Junyi data paths with sensible defaults under /data and ./data."""
+    attempted: list[str] = []
+
+    def _first_existing(candidates: list[Path]) -> Path | None:
+        for c in candidates:
+            attempted.append(str(c))
+            if c.exists():
+                return c
+        return None
+
+    if log_csv_arg:
+        log_csv = Path(log_csv_arg)
+        attempted.append(str(log_csv))
+        if not log_csv.exists():
+            return log_csv, None if not exercise_csv_arg else Path(exercise_csv_arg), attempted
+    else:
+        log_csv = _first_existing([
+            Path('data/junyi_ProblemLog_original.csv'),
+            Path('/data/junyi_ProblemLog_original.csv'),
+            Path('data/junyi_ProblemLog.csv'),
+            Path('/data/junyi_ProblemLog.csv'),
+        ])
+
+    if exercise_csv_arg:
+        exercise_csv = Path(exercise_csv_arg)
+        attempted.append(str(exercise_csv))
+    else:
+        exercise_csv = _first_existing([
+            Path('data/junyi_Exercise_table.csv'),
+            Path('/data/junyi_Exercise_table.csv'),
+        ])
+
+    return log_csv, exercise_csv, attempted
+
+
 def run_all(log_csv: Path, exercise_csv: Path | None, out_dir: Path, fig_dir: Path, max_seq_len: int, epochs: int, sample_idx: int) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     fig_dir.mkdir(parents=True, exist_ok=True)
@@ -189,15 +226,24 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     fig_dir = Path(args.fig_dir)
 
-    log_csv = Path(args.log_csv) if args.log_csv else None
-    exercise_csv = Path(args.exercise_csv) if args.exercise_csv else None
+    log_csv, exercise_csv, attempted = _resolve_junyi_paths(args.log_csv, args.exercise_csv)
 
     if log_csv is None or not log_csv.exists():
         if not args.use_synthetic_if_missing:
-            raise FileNotFoundError("Junyi log csv not found. Provide --log_csv or set --use_synthetic_if_missing.")
+            attempted_str = "\n".join([f"  - {p}" for p in attempted])
+            raise FileNotFoundError(
+                "Junyi log csv not found. Checked paths:\n"
+                f"{attempted_str}\n"
+                "Please place Junyi files under ./data (or /data), pass --log_csv/--exercise_csv explicitly, "
+                "or set --use_synthetic_if_missing."
+            )
         out_dir.mkdir(parents=True, exist_ok=True)
         log_csv = _synthetic_junyi(out_dir)
         print(f"Using synthetic Junyi log data: {log_csv}")
+
+    if exercise_csv is None or not exercise_csv.exists():
+        print("Exercise table not found; running without prerequisite graph fusion.")
+        exercise_csv = None
 
     run_all(
         log_csv=log_csv,

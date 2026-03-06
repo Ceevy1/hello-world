@@ -259,6 +259,16 @@ python experiments/vis_weights.py --log_csv data/junyi_ProblemLog_original.csv -
 python run_junyi_experiments.py --log_csv data/junyi_ProblemLog_original.csv --exercise_csv data/junyi_Exercise_table.csv
 ```
 
+默认情况下，脚本也会自动尝试从 `./data`（其次 `/data`）读取：
+- `junyi_ProblemLog_original.csv`
+- `junyi_Exercise_table.csv`
+
+即直接运行：
+
+```bash
+python run_junyi_experiments.py
+```
+
 如果本地暂时没有 Junyi 原始 CSV，可先用合成数据快速打通流程：
 
 ```bash
