@@ -226,3 +226,57 @@ Smoke run:
 ```bash
 python run_all.py
 ```
+
+
+## Junyi 精细化行为权重分析模块（新增）
+
+为避免影响原有 OULAD 训练流程，新增了独立的 Junyi 模块：
+
+- `junyi/dataloader.py`：
+  - 按 `user_id + timestamp` 构建行为序列
+  - `MAX_SEQ_LEN` 截断/补齐
+  - 多模态输入：`exercise`、`correct`、`elapsed_time/hint_used`
+  - 可选根据 `junyi_Exercise_table.csv` 构建先修关系邻接矩阵
+- `src/models/dynamic_junyi.py`：
+  - 动态权重生成器（时间注意力）
+  - 可选图融合门控单元（行为 vs 知识图）
+  - 统一优化目标：`BCE + λ * attention_regularization`
+- `experiments/exp_generalization.py`：按习题ID 80/20 未见迁移划分，输出 Accuracy/AUC
+- `experiments/exp_robustness.py`：测试集噪声注入（标签翻转/耗时置零），输出性能衰减
+- `experiments/vis_weights.py`：导出注意力权重并绘制热力图
+
+示例：
+
+```bash
+python experiments/exp_generalization.py --log_csv data/junyi_ProblemLog_original.csv --exercise_csv data/junyi_Exercise_table.csv
+python experiments/exp_robustness.py --log_csv data/junyi_ProblemLog_original.csv
+python experiments/vis_weights.py --log_csv data/junyi_ProblemLog_original.csv --sample_idx 0
+```
+
+一键运行（统一训练+评估+可视化输出，类似 `experiments.py`）：
+
+```bash
+python run_junyi_experiments.py --log_csv data/junyi_ProblemLog_original.csv --exercise_csv data/junyi_Exercise_table.csv
+```
+
+默认情况下，脚本也会自动尝试从 `./data`（其次 `/data`）读取：
+- `junyi_ProblemLog_original.csv`
+- `junyi_Exercise_table.csv`
+
+即直接运行：
+
+```bash
+python run_junyi_experiments.py
+```
+
+如果本地暂时没有 Junyi 原始 CSV，可先用合成数据快速打通流程：
+
+```bash
+python run_junyi_experiments.py --use_synthetic_if_missing
+```
+
+补充：如果数据不在默认目录，可通过环境变量指定数据根目录：
+
+```bash
+JUNYI_DATA_DIR=/path/to/data python run_junyi_experiments.py
+```

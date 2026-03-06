@@ -99,6 +99,7 @@ def train_full_pipeline(
     loss_cfg: UnifiedLossConfig = UnifiedLossConfig(),
     modules_train: np.ndarray | None = None,
     logger: ExperimentLogger | None = None,
+    hafm_epochs: int = 100,
 ) -> TrainOutputs:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -122,7 +123,16 @@ def train_full_pipeline(
     base_train = np.column_stack([p_lstm_train, p_xgb_train, p_cat_train])
     base_test = np.column_stack([p_lstm, p_xgb, p_cat])
 
-    hafm = _train_hafm(x_tab_train, base_train, y_train, loss_cfg, modules_train, logger, device=device)
+    hafm = _train_hafm(
+        x_tab_train,
+        base_train,
+        y_train,
+        loss_cfg,
+        modules_train,
+        logger,
+        epochs=hafm_epochs,
+        device=device,
+    )
     hafm.eval()
     with torch.no_grad():
         xt = torch.FloatTensor(x_tab_test).to(device)
