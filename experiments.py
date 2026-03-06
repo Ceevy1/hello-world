@@ -223,14 +223,36 @@ def run_early_prediction(reporter: ResultsReporter) -> Dict:
         # XGBoost (fast baseline)
         xgb_m = XGBoostModel(XGB_CONFIG)
         xgb_m.fit(train_ds["tabular"], train_ds["y_reg"])
-        pred = xgb_m.predict(test_ds["tabular"])
-        w_results["XGBoost"] = compute_regression_metrics(test_ds["y_reg"], pred)
+        pred_xgb = xgb_m.predict(test_ds["tabular"])
+        w_results["XGBoost"] = compute_regression_metrics(test_ds["y_reg"], pred_xgb)
+
+        # CatBoost
+        cat_m = CatBoostModel(CATBOOST_CONFIG)
+        cat_m.fit(train_ds["tabular"], train_ds["y_reg"])
+        pred_cat = cat_m.predict(test_ds["tabular"])
+        w_results["CatBoost"] = compute_regression_metrics(test_ds["y_reg"], pred_cat)
 
         # LSTM
         lstm_m = LSTMTrainer(LSTM_CONFIG, input_dim=dataset["sequence"].shape[2], seed=SEED)
         lstm_m.fit(train_ds["sequence"], train_ds["y_reg"], val_ds["sequence"], val_ds["y_reg"])
         pred_lstm = lstm_m.predict(test_ds["sequence"])
         w_results["LSTM"] = compute_regression_metrics(test_ds["y_reg"], pred_lstm)
+
+        # DynamicFusion (built on base model outputs)
+        train_base_preds = np.column_stack([
+            lstm_m.predict(train_ds["sequence"]),
+            xgb_m.predict(train_ds["tabular"]),
+            cat_m.predict(train_ds["tabular"]),
+        ])
+        test_base_preds = np.column_stack([pred_lstm, pred_xgb, pred_cat])
+        dynamic_m = DynamicFusionTrainer(
+            tabular_dim=train_ds["tabular"].shape[1],
+            config=FUSION_CONFIG,
+            seed=SEED,
+        )
+        dynamic_m.fit(train_ds["tabular"], train_base_preds, train_ds["y_reg"])
+        pred_dynamic, _ = dynamic_m.predict(test_ds["tabular"], test_base_preds)
+        w_results["DynamicFusion"] = compute_regression_metrics(test_ds["y_reg"], pred_dynamic)
 
         window_results[window_name] = w_results
         logger.info(f"Window {window_name}: {w_results}")
@@ -293,15 +315,34 @@ def run_lomo_transfer(dataset: Dict, reporter: ResultsReporter) -> Dict:
         mod_results["CatBoost"] = compute_regression_metrics(test_ds["y_reg"], pred_cat)
 
         # LSTM
-        if len(train_ds["sequence"]) > 50:
-            lstm_m = LSTMTrainer(LSTM_CONFIG, input_dim=dataset["sequence"].shape[2], seed=SEED)
-            train_split = int(0.9 * len(train_ds["y_reg"]))
-            lstm_m.fit(
-                train_ds["sequence"][:train_split], train_ds["y_reg"][:train_split],
-                train_ds["sequence"][train_split:], train_ds["y_reg"][train_split:],
-            )
-            pred_lstm = lstm_m.predict(test_ds["sequence"])
-            mod_results["LSTM"] = compute_regression_metrics(test_ds["y_reg"], pred_lstm)
+        lstm_m = LSTMTrainer(LSTM_CONFIG, input_dim=dataset["sequence"].shape[2], seed=SEED)
+        train_split = int(0.9 * len(train_ds["y_reg"]))
+        lstm_m.fit(
+            train_ds["sequence"][:train_split], train_ds["y_reg"][:train_split],
+            train_ds["sequence"][train_split:], train_ds["y_reg"][train_split:],
+        )
+        pred_lstm = lstm_m.predict(test_ds["sequence"])
+        mod_results["LSTM"] = compute_regression_metrics(test_ds["y_reg"], pred_lstm)
+
+        # DynamicFusion
+        train_base_preds = np.column_stack([
+            lstm_m.predict(train_ds["sequence"]),
+            xgb_m.predict(train_ds["tabular"]),
+            cat_m.predict(train_ds["tabular"]),
+        ])
+        test_base_preds = np.column_stack([
+            pred_lstm,
+            xgb_m.predict(test_ds["tabular"]),
+            pred_cat,
+        ])
+        dynamic_m = DynamicFusionTrainer(
+            tabular_dim=train_ds["tabular"].shape[1],
+            config=FUSION_CONFIG,
+            seed=SEED,
+        )
+        dynamic_m.fit(train_ds["tabular"], train_base_preds, train_ds["y_reg"])
+        pred_dynamic, _ = dynamic_m.predict(test_ds["tabular"], test_base_preds)
+        mod_results["DynamicFusion"] = compute_regression_metrics(test_ds["y_reg"], pred_dynamic)
 
         lomo_results[held_out_mod] = mod_results
         logger.info(f"Module {held_out_mod}: {mod_results}")
@@ -357,6 +398,7 @@ def run_maml(dataset: Dict, reporter: ResultsReporter) -> Dict:
 
     # Fine-tuning and evaluation per task
     maml_results = {}
+    maml_plot_payload = {}
     for task in tasks:
         mod = task["module"]
         X = task["tabular"]
@@ -374,14 +416,62 @@ def run_maml(dataset: Dict, reporter: ResultsReporter) -> Dict:
 
         adapted = maml_trainer.fine_tune(sup_x, sup_y, n_steps=20)
         pred = maml_trainer.predict(adapted, qry_x)
-        metrics = compute_regression_metrics(qry_y, pred)
-        maml_results[mod] = metrics
-        logger.info(f"MAML Module {mod}: {metrics}")
+        metrics_maml = compute_regression_metrics(qry_y, pred)
+
+        # DynamicFusion baseline on the same support/query split
+        seq_x = task["sequence"]
+        sup_seq, qry_seq = seq_x[:split], seq_x[split:]
+
+        lstm_m = LSTMTrainer(LSTM_CONFIG, input_dim=seq_x.shape[2], seed=SEED)
+        val_split = max(1, int(0.8 * len(sup_y)))
+        lstm_m.fit(
+            sup_seq[:val_split], sup_y[:val_split],
+            sup_seq[val_split:], sup_y[val_split:],
+        )
+        xgb_m = XGBoostModel(XGB_CONFIG)
+        xgb_m.fit(sup_x, sup_y)
+        cat_m = CatBoostModel(CATBOOST_CONFIG)
+        cat_m.fit(sup_x, sup_y)
+
+        sup_base_preds = np.column_stack([
+            lstm_m.predict(sup_seq),
+            xgb_m.predict(sup_x),
+            cat_m.predict(sup_x),
+        ])
+        qry_base_preds = np.column_stack([
+            lstm_m.predict(qry_seq),
+            xgb_m.predict(qry_x),
+            cat_m.predict(qry_x),
+        ])
+        dynamic_m = DynamicFusionTrainer(
+            tabular_dim=sup_x.shape[1],
+            config=FUSION_CONFIG,
+            seed=SEED,
+        )
+        dynamic_m.fit(sup_x, sup_base_preds, sup_y)
+        pred_dynamic, _ = dynamic_m.predict(qry_x, qry_base_preds)
+        metrics_dynamic = compute_regression_metrics(qry_y, pred_dynamic)
+
+        maml_results[mod] = {
+            "MAML": metrics_maml,
+            "DynamicFusion": metrics_dynamic,
+        }
+        maml_plot_payload[mod] = maml_results[mod]
+        logger.info(f"MAML Module {mod}: {metrics_maml}")
+        logger.info(f"DynamicFusion Module {mod}: {metrics_dynamic}")
 
     # Save results
-    maml_rows = [{"Module": mod, **metrics} for mod, metrics in maml_results.items()]
+    maml_rows = []
+    for mod, model_metrics in maml_results.items():
+        for model_name, metrics in model_metrics.items():
+            maml_rows.append({"Module": mod, "Model": model_name, **metrics})
     maml_df = pd.DataFrame(maml_rows)
     maml_df.to_csv(os.path.join(OUTPUT_DIR, "maml_results.csv"), index=False)
+    reporter.plot_transfer_comparison(
+        maml_plot_payload,
+        metric="RMSE",
+        save_name="maml_transfer_RMSE.png",
+    )
     reporter.to_latex_table(
         maml_df,
         caption="MAML Meta-Learning Transfer Performance per Module",
@@ -390,7 +480,10 @@ def run_maml(dataset: Dict, reporter: ResultsReporter) -> Dict:
         bold_min_cols=["RMSE", "MAE"],
         bold_max_cols=["R2"],
     )
-    logger.info(f"MAML mean RMSE: {maml_df['RMSE'].mean():.4f} ± {maml_df['RMSE'].std():.4f}")
+    for model_name, sub_df in maml_df.groupby("Model"):
+        logger.info(
+            f"{model_name} mean RMSE: {sub_df['RMSE'].mean():.4f} ± {sub_df['RMSE'].std():.4f}"
+        )
     return maml_results
 
 
@@ -432,7 +525,9 @@ def run_significance_tests(
 # ============================================================
 def run_shap_analysis(
     xgb_model: XGBoostModel,
+    dynamic_model: DynamicFusionTrainer,
     X_tab: np.ndarray,
+    base_preds: np.ndarray,
     feature_names,
     reporter: ResultsReporter,
 ):
@@ -467,7 +562,38 @@ def run_shap_analysis(
             save_name="shap_modal_contribution.png",
         )
 
-        return importance_df
+        # DynamicFusion SHAP using concatenated [tabular, base_preds]
+        fusion_feature_names = [
+            *feature_names,
+            "pred_lstm",
+            "pred_xgb",
+            "pred_cat",
+        ]
+        fusion_X = np.column_stack([X_tab, base_preds])
+        fusion_analyzer = SHAPAnalyzer(fusion_feature_names)
+
+        def dynamic_predict_fn(fusion_input: np.ndarray):
+            x_part = fusion_input[:, :X_tab.shape[1]]
+            p_part = fusion_input[:, X_tab.shape[1]:]
+            pred, _ = dynamic_model.predict(x_part, p_part)
+            return pred
+
+        fusion_shap_vals = fusion_analyzer.explain_kernel(dynamic_predict_fn, fusion_X)
+        if fusion_shap_vals is not None:
+            fusion_importance_df = fusion_analyzer.get_global_importance()
+            fusion_importance_df.to_csv(
+                os.path.join(OUTPUT_DIR, "dynamic_fusion_shap_importance.csv"),
+                index=False,
+            )
+            fusion_analyzer.plot_summary(
+                save_path=os.path.join(FIGURE_DIR, "dynamic_fusion_shap_summary.png")
+            )
+            logger.info(f"Top 5 DynamicFusion SHAP features:\n{fusion_importance_df.head()}")
+
+        return {
+            "xgb": importance_df,
+            "dynamic": fusion_importance_df if fusion_shap_vals is not None else None,
+        }
     return None
 
 
@@ -517,7 +643,13 @@ def main():
     feature_names = dataset.get("tab_feature_names", [f"feat_{i}" for i in range(F)])
     shap_result = run_shap_analysis(
         models["xgb"],
+        models["dynamic"],
         test_data["X_tab"],
+        np.column_stack([
+            models["lstm"].predict(test_data["X_seq"]),
+            models["xgb"].predict(test_data["X_tab"]),
+            models["cat"].predict(test_data["X_tab"]),
+        ]),
         feature_names,
         reporter,
     )
