@@ -252,3 +252,15 @@ python experiments/exp_generalization.py --log_csv data/junyi_ProblemLog_origina
 python experiments/exp_robustness.py --log_csv data/junyi_ProblemLog_original.csv
 python experiments/vis_weights.py --log_csv data/junyi_ProblemLog_original.csv --sample_idx 0
 ```
+
+一键运行（统一训练+评估+可视化输出，类似 `experiments.py`）：
+
+```bash
+python run_junyi_experiments.py --log_csv data/junyi_ProblemLog_original.csv --exercise_csv data/junyi_Exercise_table.csv
+```
+
+如果本地暂时没有 Junyi 原始 CSV，可先用合成数据快速打通流程：
+
+```bash
+python run_junyi_experiments.py --use_synthetic_if_missing
+```
