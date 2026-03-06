@@ -274,3 +274,9 @@ python run_junyi_experiments.py
 ```bash
 python run_junyi_experiments.py --use_synthetic_if_missing
 ```
+
+补充：如果数据不在默认目录，可通过环境变量指定数据根目录：
+
+```bash
+JUNYI_DATA_DIR=/path/to/data python run_junyi_experiments.py
+```

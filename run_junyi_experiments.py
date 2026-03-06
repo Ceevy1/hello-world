@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import Dict
 
@@ -66,8 +67,28 @@ def _synthetic_junyi(path: Path, n_users: int = 120, n_ex: int = 60, n_steps: in
 
 
 def _resolve_junyi_paths(log_csv_arg: str | None, exercise_csv_arg: str | None) -> tuple[Path | None, Path | None, list[str]]:
-    """Resolve Junyi data paths with sensible defaults under /data and ./data."""
+    """Resolve Junyi data paths robustly across cwd/script-dir/data mounts."""
     attempted: list[str] = []
+    script_root = Path(__file__).resolve().parent
+    env_data_dir = os.environ.get("JUNYI_DATA_DIR")
+
+    search_roots = []
+    if env_data_dir:
+        search_roots.append(Path(env_data_dir))
+    search_roots.extend([
+        Path.cwd(),
+        script_root,
+        script_root / "data",
+        Path.cwd() / "data",
+        Path("/data"),
+    ])
+
+    # de-duplicate while keeping order
+    uniq_roots: list[Path] = []
+    for r in search_roots:
+        rr = r.resolve() if r.exists() else r
+        if rr not in uniq_roots:
+            uniq_roots.append(rr)
 
     def _first_existing(candidates: list[Path]) -> Path | None:
         for c in candidates:
@@ -76,27 +97,57 @@ def _resolve_junyi_paths(log_csv_arg: str | None, exercise_csv_arg: str | None) 
                 return c
         return None
 
+    def _discover_by_patterns(patterns: list[str]) -> Path | None:
+        for root in uniq_roots:
+            if not root.exists() or not root.is_dir():
+                continue
+            for pat in patterns:
+                # shallow pattern
+                for cand in sorted(root.glob(pat)):
+                    attempted.append(str(cand))
+                    if cand.exists():
+                        return cand
+                # one-level nested data folders (avoid deep expensive scan)
+                for sub in sorted(root.glob("*")):
+                    if sub.is_dir() and sub.name.lower() in {"data", "dataset", "datasets"}:
+                        for cand in sorted(sub.glob(pat)):
+                            attempted.append(str(cand))
+                            if cand.exists():
+                                return cand
+        return None
+
     if log_csv_arg:
         log_csv = Path(log_csv_arg)
         attempted.append(str(log_csv))
         if not log_csv.exists():
             return log_csv, None if not exercise_csv_arg else Path(exercise_csv_arg), attempted
     else:
-        log_csv = _first_existing([
-            Path('data/junyi_ProblemLog_original.csv'),
-            Path('/data/junyi_ProblemLog_original.csv'),
-            Path('data/junyi_ProblemLog.csv'),
-            Path('/data/junyi_ProblemLog.csv'),
-        ])
+        direct_log_candidates = []
+        for root in uniq_roots:
+            direct_log_candidates.extend([
+                root / "junyi_ProblemLog_original.csv",
+                root / "junyi_ProblemLog.csv",
+                root / "Junyi_ProblemLog_original.csv",
+                root / "problem_log.csv",
+            ])
+        log_csv = _first_existing(direct_log_candidates)
+        if log_csv is None:
+            log_csv = _discover_by_patterns(["*ProblemLog*.csv", "*problem*log*.csv"])
 
     if exercise_csv_arg:
         exercise_csv = Path(exercise_csv_arg)
         attempted.append(str(exercise_csv))
     else:
-        exercise_csv = _first_existing([
-            Path('data/junyi_Exercise_table.csv'),
-            Path('/data/junyi_Exercise_table.csv'),
-        ])
+        direct_ex_candidates = []
+        for root in uniq_roots:
+            direct_ex_candidates.extend([
+                root / "junyi_Exercise_table.csv",
+                root / "Junyi_Exercise_table.csv",
+                root / "exercise_table.csv",
+            ])
+        exercise_csv = _first_existing(direct_ex_candidates)
+        if exercise_csv is None:
+            exercise_csv = _discover_by_patterns(["*Exercise*table*.csv", "*exercise*table*.csv"])
 
     return log_csv, exercise_csv, attempted
 
