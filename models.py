@@ -274,11 +274,44 @@ class CatBoostModel:
         self.config = config
 
     def fit(self, X: np.ndarray, y: np.ndarray, X_val=None, y_val=None):
-        if self.use_catboost and X_val is not None:
-            self.model.fit(X, y, eval_set=(X_val, y_val))
-        else:
+        y = np.asarray(y)
+        if y.size == 0:
+            raise ValueError("CatBoostModel.fit received an empty target array.")
+
+        if np.unique(y).size <= 1:
+            constant = float(y[0])
+            logger.warning(
+                "[CatBoost] Target is constant (%.4f). Falling back to DummyRegressor to keep pipeline running.",
+                constant,
+            )
+            from sklearn.dummy import DummyRegressor
+
+            self.model = DummyRegressor(strategy="constant", constant=constant)
             self.model.fit(X, y)
-        logger.info("[CatBoost] Training complete.")
+            self.use_catboost = False
+            return
+
+        try:
+            if self.use_catboost and X_val is not None:
+                self.model.fit(X, y, eval_set=(X_val, y_val))
+            else:
+                self.model.fit(X, y)
+            logger.info("[CatBoost] Training complete.")
+        except Exception as exc:
+            msg = str(exc)
+            if "All train targets are equal" in msg:
+                constant = float(np.mean(y))
+                logger.warning(
+                    "[CatBoost] CatBoost rejected constant targets. Falling back to DummyRegressor (constant=%.4f).",
+                    constant,
+                )
+                from sklearn.dummy import DummyRegressor
+
+                self.model = DummyRegressor(strategy="constant", constant=constant)
+                self.model.fit(X, y)
+                self.use_catboost = False
+            else:
+                raise
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         return self.model.predict(X)
