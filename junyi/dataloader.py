@@ -12,10 +12,9 @@ from torch.utils.data import Dataset
 
 REQUIRED_LOG_COLUMNS = [
     "user_id",
-    "exercise",
+    "exercise_id",
     "correct",
     "elapsed_time",
-    "hint_used",
     "timestamp",
 ]
 
@@ -24,6 +23,7 @@ REQUIRED_LOG_COLUMNS = [
 class JunyiConfig:
     max_seq_len: int = 100
     min_history: int = 1
+    min_interactions_per_user: int = 20
 
 
 class JunyiSequenceDataset(Dataset):
@@ -56,16 +56,39 @@ class JunyiDataBuilder:
 
     def load_logs(self, log_csv: str | Path) -> pd.DataFrame:
         df = pd.read_csv(log_csv)
+
+        # Junyi original column names -> unified training schema.
+        column_map = {
+            "exercise": "exercise_id",
+            "time_done": "timestamp",
+            "time_taken": "elapsed_time",
+        }
+        for src, tgt in column_map.items():
+            if src in df.columns and tgt not in df.columns:
+                df[tgt] = df[src]
+
+        if "hint_used" not in df.columns:
+            df["hint_used"] = 0
+
         missing = [c for c in REQUIRED_LOG_COLUMNS if c not in df.columns]
         if missing:
             raise ValueError(f"Missing required columns in log file: {missing}")
 
-        df = df[REQUIRED_LOG_COLUMNS].copy()
+        df = df[REQUIRED_LOG_COLUMNS + ["hint_used"]].copy()
         df["correct"] = pd.to_numeric(df["correct"], errors="coerce").fillna(0).astype(int).clip(0, 1)
         df["elapsed_time"] = pd.to_numeric(df["elapsed_time"], errors="coerce").fillna(0).clip(lower=0)
         df["hint_used"] = pd.to_numeric(df["hint_used"], errors="coerce").fillna(0).clip(lower=0)
-        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+
+        ts_numeric = pd.to_numeric(df["timestamp"], errors="coerce")
+        if ts_numeric.notna().any():
+            # Junyi `time_done` uses Unix timestamps in microseconds.
+            df["timestamp"] = ts_numeric / 1e6
+        else:
+            dt_series = pd.to_datetime(df["timestamp"], errors="coerce")
+            df["timestamp"] = np.where(dt_series.notna(), dt_series.astype("int64") / 1e9, np.nan)
+
         df = df.dropna(subset=["timestamp"]).sort_values(["user_id", "timestamp"])
+        df = df.groupby("user_id").filter(lambda x: len(x) >= self.cfg.min_interactions_per_user)
         return df
 
     def build_exercise_graph(self, exercise_csv: str | Path) -> Tuple[np.ndarray, Dict[str, int]]:
@@ -120,7 +143,7 @@ class JunyiDataBuilder:
 
         for _, g in df.groupby("user_id"):
             g = g.sort_values("timestamp")
-            ex = [self._encode_exercise(str(x)) for x in g["exercise"].tolist()]
+            ex = [self._encode_exercise(str(x)) for x in g["exercise_id"].tolist()]
             resp = g["correct"].astype(int).tolist()
             elapsed = ((np.log1p(g["elapsed_time"].values) - e_mean) / e_std).astype(np.float32)
             hints = ((np.log1p(g["hint_used"].values) - h_mean) / h_std).astype(np.float32)
