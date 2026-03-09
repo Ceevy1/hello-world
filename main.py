@@ -30,6 +30,35 @@ from evaluation import (
     SignificanceTester, SHAPAnalyzer, ResultsReporter
 )
 
+
+def _to_binary_labels(y: np.ndarray) -> np.ndarray:
+    """Convert labels to OULAD-style pass/fail binary labels."""
+    y = np.array(y).flatten()
+    # Real OULAD already uses {0,1}; synthetic fallback may include {0,1,2}.
+    return (y > 0).astype(int)
+
+
+def _classification_from_scores(y_true_cls: np.ndarray, y_score: np.ndarray) -> Dict:
+    """Compute AUC/Accuracy/F1 from score-like predictions."""
+    from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
+
+    y_true_bin = _to_binary_labels(y_true_cls)
+    # Treat model output as continuous score and squash to probability [0,1].
+    y_pred_prob = np.clip(np.array(y_score).flatten() / 100.0, 0.0, 1.0)
+    y_pred_bin = (y_pred_prob >= 0.5).astype(int)
+
+    auc = float("nan")
+    if len(np.unique(y_true_bin)) > 1:
+        auc = float(roc_auc_score(y_true_bin, y_pred_prob))
+
+    return {
+        "AUC": auc,
+        "Accuracy": float(accuracy_score(y_true_bin, y_pred_bin)),
+        "F1": float(f1_score(y_true_bin, y_pred_bin, zero_division=0)),
+        "y_pred_prob": y_pred_prob,
+        "y_pred_bin": y_pred_bin,
+    }
+
 # --- Auto-detect available backends ---
 TORCH_AVAILABLE = False
 XGB_AVAILABLE = False
@@ -156,6 +185,11 @@ def run_standard_comparison(dataset: Dict, reporter: ResultsReporter) -> Dict:
     predictions["DynamicFusion"] = pred_dyn
     logger.info(f"DynamicFusion: {results['DynamicFusion']}")
 
+    # Add OULAD binary classification metrics (pass/fail)
+    for model_name, pred in predictions.items():
+        cls = _classification_from_scores(test_ds["y_cls"], pred)
+        results[model_name].update({"AUC": cls["AUC"], "Accuracy": cls["Accuracy"], "F1": cls["F1"]})
+
     # Save
     results_df = reporter.compile_metrics(results, "standard_comparison")
     reporter.plot_model_comparison(results_df, "RMSE", "Model Comparison (RMSE)", "comparison_RMSE.png")
@@ -169,6 +203,38 @@ def run_standard_comparison(dataset: Dict, reporter: ResultsReporter) -> Dict:
         bold_min_cols=["RMSE", "MAE"],
         bold_max_cols=["R2"],
     )
+
+    # Student-level prediction export (StudentA = predicted class)
+    dyn_cls = _classification_from_scores(test_ds["y_cls"], predictions["DynamicFusion"])
+    prediction_df = pd.DataFrame({
+        "student_id": test_ds["student_id"],
+        "y_true": _to_binary_labels(test_ds["y_cls"]),
+        "y_pred_prob": dyn_cls["y_pred_prob"],
+        "StudentA": dyn_cls["y_pred_bin"],
+        "y_pred": dyn_cls["y_pred_bin"],
+    })
+    prediction_df.to_csv(os.path.join(OUTPUT_DIR, "prediction_results.csv"), index=False)
+
+    # Binary ROC curve data (DynamicFusion)
+    try:
+        from sklearn.metrics import roc_curve
+
+        fpr, tpr, _ = roc_curve(_to_binary_labels(test_ds["y_cls"]), dyn_cls["y_pred_prob"])
+        pd.DataFrame({"fpr": fpr, "tpr": tpr}).to_csv(os.path.join(OUTPUT_DIR, "roc_curve_data.csv"), index=False)
+    except Exception as e:
+        logger.warning(f"Failed to export ROC curve data: {e}")
+
+    # Unified result table requested by paper draft
+    exp_rows = []
+    for model_name, met in results.items():
+        exp_rows.append({
+            "Model": model_name,
+            "Dataset": "OULAD",
+            "AUC": met.get("AUC", np.nan),
+            "Accuracy": met.get("Accuracy", np.nan),
+            "F1": met.get("F1", np.nan),
+        })
+    pd.DataFrame(exp_rows).to_csv(os.path.join(OUTPUT_DIR, "experiment_results.csv"), index=False)
 
     return {
         "results": results,
@@ -197,26 +263,54 @@ def run_early_prediction(reporter: ResultsReporter) -> Dict:
         tr, va, te = split_dataset(ds, seed=SEED)
 
         wres = {}
-        for ModelCls, mname, use_seq in [
-            (LSTMClass, "LSTM",     True),
-            (XGBClass,  "XGBoost",  False),
-            (CATClass,  "CatBoost", False),
-        ]:
-            if use_seq:
-                m = ModelCls(LSTM_CONFIG, input_dim=ds["sequence"].shape[2], seed=SEED)
-                m.fit(tr["sequence"], tr["y_reg"], va["sequence"], va["y_reg"])
-                pred = m.predict(te["sequence"])
-            else:
-                cfg = XGB_CONFIG if mname == "XGBoost" else CATBOOST_CONFIG
-                m = ModelCls(cfg)
-                m.fit(tr["tabular"], tr["y_reg"])
-                pred = m.predict(te["tabular"])
-            wres[mname] = compute_regression_metrics(te["y_reg"], pred)
+
+        # Train all models used in standard comparison.
+        lstm = LSTMClass(LSTM_CONFIG, input_dim=ds["sequence"].shape[2], seed=SEED)
+        lstm.fit(tr["sequence"], tr["y_reg"], va["sequence"], va["y_reg"])
+        pred_lstm = lstm.predict(te["sequence"])
+
+        xgb = XGBClass(XGB_CONFIG)
+        xgb.fit(tr["tabular"], tr["y_reg"])
+        pred_xgb = xgb.predict(te["tabular"])
+
+        cat = CATClass(CATBOOST_CONFIG)
+        cat.fit(tr["tabular"], tr["y_reg"])
+        pred_cat = cat.predict(te["tabular"])
+
+        train_base = np.column_stack([
+            lstm.predict(tr["sequence"]),
+            xgb.predict(tr["tabular"]),
+            cat.predict(tr["tabular"]),
+        ])
+        test_base = np.column_stack([pred_lstm, pred_xgb, pred_cat])
+
+        stacker = StackClass(meta_model_type="linear")
+        stacker.fit(train_base, tr["y_reg"])
+        pred_stack = stacker.predict(test_base)
+
+        dynamic = FusionClass(tabular_dim=tr["tabular"].shape[1], config=FUSION_CONFIG, seed=SEED)
+        dynamic.fit(tr["tabular"], train_base, tr["y_reg"])
+        pred_dyn, _ = dynamic.predict(te["tabular"], test_base)
+
+        all_preds = {
+            "LSTM": pred_lstm,
+            "XGBoost": pred_xgb,
+            "CatBoost": pred_cat,
+            "Stacking": pred_stack,
+            "DynamicFusion": pred_dyn,
+        }
+        for model_name, pred in all_preds.items():
+            met = compute_regression_metrics(te["y_reg"], pred)
+            met.update({k: v for k, v in _classification_from_scores(te["y_cls"], pred).items() if k in {"AUC", "Accuracy", "F1"}})
+            wres[model_name] = met
+
         window_results[wname] = wres
         logger.info(f"  {wname}: {wres}")
 
     reporter.plot_early_prediction_curve(window_results, "RMSE", "early_prediction_RMSE.png")
     reporter.plot_early_prediction_curve(window_results, "R2",   "early_prediction_R2.png")
+    reporter.plot_early_prediction_curve(window_results, "AUC", "early_prediction_AUC.png")
+    reporter.plot_early_prediction_curve(window_results, "Accuracy", "early_prediction_Accuracy.png")
 
     rows = [{"Window": w, "Model": m, **met}
             for w, wr in window_results.items() for m, met in wr.items()]
@@ -239,24 +333,49 @@ def run_lomo_transfer(dataset: Dict, reporter: ResultsReporter) -> Dict:
     lomo_results = {}
     for train_ds, test_ds, mod in LeaveOneModuleOut().split(dataset):
         mod_res = {}
-        for ModelCls, mname, use_seq in [
-            (XGBClass,  "XGBoost",  False),
-            (CATClass,  "CatBoost", False),
-            (LSTMClass, "LSTM",     True),
-        ]:
-            if use_seq:
-                if len(train_ds["y_reg"]) < 50: continue
-                m = ModelCls(LSTM_CONFIG, input_dim=dataset["sequence"].shape[2], seed=SEED)
-                split = int(0.9 * len(train_ds["y_reg"]))
-                m.fit(train_ds["sequence"][:split], train_ds["y_reg"][:split],
-                      train_ds["sequence"][split:], train_ds["y_reg"][split:])
-                pred = m.predict(test_ds["sequence"])
-            else:
-                cfg = XGB_CONFIG if mname == "XGBoost" else CATBOOST_CONFIG
-                m = ModelCls(cfg)
-                m.fit(train_ds["tabular"], train_ds["y_reg"])
-                pred = m.predict(test_ds["tabular"])
-            mod_res[mname] = compute_regression_metrics(test_ds["y_reg"], pred)
+        if len(train_ds["y_reg"]) < 50:
+            continue
+
+        split = int(0.9 * len(train_ds["y_reg"]))
+        lstm = LSTMClass(LSTM_CONFIG, input_dim=dataset["sequence"].shape[2], seed=SEED)
+        lstm.fit(train_ds["sequence"][:split], train_ds["y_reg"][:split],
+                 train_ds["sequence"][split:], train_ds["y_reg"][split:])
+        pred_lstm = lstm.predict(test_ds["sequence"])
+
+        xgb = XGBClass(XGB_CONFIG)
+        xgb.fit(train_ds["tabular"], train_ds["y_reg"])
+        pred_xgb = xgb.predict(test_ds["tabular"])
+
+        cat = CATClass(CATBOOST_CONFIG)
+        cat.fit(train_ds["tabular"], train_ds["y_reg"])
+        pred_cat = cat.predict(test_ds["tabular"])
+
+        train_base = np.column_stack([
+            lstm.predict(train_ds["sequence"]),
+            xgb.predict(train_ds["tabular"]),
+            cat.predict(train_ds["tabular"]),
+        ])
+        test_base = np.column_stack([pred_lstm, pred_xgb, pred_cat])
+
+        stacker = StackClass(meta_model_type="linear")
+        stacker.fit(train_base, train_ds["y_reg"])
+        pred_stack = stacker.predict(test_base)
+
+        dynamic = FusionClass(tabular_dim=train_ds["tabular"].shape[1], config=FUSION_CONFIG, seed=SEED)
+        dynamic.fit(train_ds["tabular"], train_base, train_ds["y_reg"])
+        pred_dyn, _ = dynamic.predict(test_ds["tabular"], test_base)
+
+        all_preds = {
+            "LSTM": pred_lstm,
+            "XGBoost": pred_xgb,
+            "CatBoost": pred_cat,
+            "Stacking": pred_stack,
+            "DynamicFusion": pred_dyn,
+        }
+        for model_name, pred in all_preds.items():
+            met = compute_regression_metrics(test_ds["y_reg"], pred)
+            met.update({k: v for k, v in _classification_from_scores(test_ds["y_cls"], pred).items() if k in {"AUC", "Accuracy", "F1"}})
+            mod_res[model_name] = met
         lomo_results[mod] = mod_res
         logger.info(f"  Module {mod}: {mod_res}")
 
@@ -265,6 +384,8 @@ def run_lomo_transfer(dataset: Dict, reporter: ResultsReporter) -> Dict:
     df = pd.DataFrame(rows)
     df.to_csv(os.path.join(OUTPUT_DIR, "lomo_results.csv"), index=False)
     reporter.plot_transfer_comparison(lomo_results, "RMSE", "lomo_transfer_RMSE.png")
+    reporter.plot_transfer_comparison(lomo_results, "AUC", "lomo_transfer_AUC.png")
+    reporter.plot_transfer_comparison(lomo_results, "Accuracy", "lomo_transfer_Accuracy.png")
     reporter.to_latex_table(df, "LOMO Transfer Learning Results", "tab:lomo",
                             "lomo_table.tex", bold_min_cols=["RMSE","MAE"], bold_max_cols=["R2"])
 
