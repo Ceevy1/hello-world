@@ -555,7 +555,8 @@ def main():
     logger.info("ALL EXPERIMENTS COMPLETE")
     logger.info("="*60)
     for model, m in exp1["results"].items():
-        logger.info(f"  {model:15s}: RMSE={m['RMSE']:.4f}  MAE={m['MAE']:.4f}  R²={m['R2']:.4f}")
+        # Use ASCII-only label to avoid Windows GBK console encoding errors.
+        logger.info(f"  {model:15s}: RMSE={m['RMSE']:.4f}  MAE={m['MAE']:.4f}  R2={m['R2']:.4f}")
     logger.info(f"\nOutputs: {OUTPUT_DIR}")
     logger.info(f"Figures: {FIGURE_DIR}")
 
