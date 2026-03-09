@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -12,10 +12,9 @@ from torch.utils.data import Dataset
 
 REQUIRED_LOG_COLUMNS = [
     "user_id",
-    "exercise",
+    "exercise_id",
     "correct",
     "elapsed_time",
-    "hint_used",
     "timestamp",
 ]
 
@@ -24,6 +23,8 @@ REQUIRED_LOG_COLUMNS = [
 class JunyiConfig:
     max_seq_len: int = 100
     min_history: int = 1
+    min_interactions_per_user: int = 20
+    elapsed_time_clip_sec: float = 7200.0
 
 
 class JunyiSequenceDataset(Dataset):
@@ -54,18 +55,76 @@ class JunyiDataBuilder:
         self.cfg = cfg
         self.exercise2id: Dict[str, int] = {"<PAD>": 0}
 
+    @staticmethod
+    def _normalize_timestamp_seconds(series: pd.Series) -> pd.Series:
+        ts_numeric = pd.to_numeric(series, errors="coerce")
+        if ts_numeric.notna().any():
+            median_abs = float(np.nanmedian(np.abs(ts_numeric.values)))
+            # Heuristic by magnitude to avoid wrong unit assumptions.
+            if median_abs > 1e14:  # microseconds
+                return ts_numeric / 1e6
+            if median_abs > 1e11:  # milliseconds
+                return ts_numeric / 1e3
+            return ts_numeric  # already seconds
+
+        dt_series = pd.to_datetime(series, errors="coerce")
+        return pd.Series(
+            np.where(dt_series.notna(), dt_series.astype("int64") / 1e9, np.nan),
+            index=series.index,
+        )
+
+    @staticmethod
+    def _safe_standardize(values: np.ndarray) -> np.ndarray:
+        values = np.asarray(values, dtype=np.float64)
+        values = np.nan_to_num(values, nan=0.0, posinf=0.0, neginf=0.0)
+        mean = float(values.mean())
+        std = float(values.std())
+        if not np.isfinite(std) or std < 1e-8:
+            std = 1.0
+        out = (values - mean) / std
+        return np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+
     def load_logs(self, log_csv: str | Path) -> pd.DataFrame:
         df = pd.read_csv(log_csv)
+
+        # Junyi original column names -> unified training schema.
+        column_map = {
+            "exercise": "exercise_id",
+            "time_done": "timestamp",
+            "time_taken": "elapsed_time",
+        }
+        for src, tgt in column_map.items():
+            if src in df.columns and tgt not in df.columns:
+                df[tgt] = df[src]
+
+        if "hint_used" not in df.columns:
+            df["hint_used"] = 0
+
         missing = [c for c in REQUIRED_LOG_COLUMNS if c not in df.columns]
         if missing:
             raise ValueError(f"Missing required columns in log file: {missing}")
 
-        df = df[REQUIRED_LOG_COLUMNS].copy()
+        df = df[REQUIRED_LOG_COLUMNS + ["hint_used"]].copy()
         df["correct"] = pd.to_numeric(df["correct"], errors="coerce").fillna(0).astype(int).clip(0, 1)
-        df["elapsed_time"] = pd.to_numeric(df["elapsed_time"], errors="coerce").fillna(0).clip(lower=0)
-        df["hint_used"] = pd.to_numeric(df["hint_used"], errors="coerce").fillna(0).clip(lower=0)
-        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+
+        elapsed = pd.to_numeric(df["elapsed_time"], errors="coerce")
+        elapsed = elapsed.replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(lower=0.0)
+        if self.cfg.elapsed_time_clip_sec > 0:
+            elapsed = elapsed.clip(upper=self.cfg.elapsed_time_clip_sec)
+        df["elapsed_time"] = elapsed
+
+        hints = pd.to_numeric(df["hint_used"], errors="coerce")
+        df["hint_used"] = hints.replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(lower=0.0, upper=100.0)
+
+        df["timestamp"] = self._normalize_timestamp_seconds(df["timestamp"])
+
         df = df.dropna(subset=["timestamp"]).sort_values(["user_id", "timestamp"])
+        df = df.groupby("user_id").filter(lambda x: len(x) >= self.cfg.min_interactions_per_user)
+        if df.empty:
+            raise ValueError(
+                "No usable Junyi records after preprocessing. "
+                "Please check timestamp/elapsed_time fields or lower min_interactions_per_user."
+            )
         return df
 
     def build_exercise_graph(self, exercise_csv: str | Path) -> Tuple[np.ndarray, Dict[str, int]]:
@@ -90,7 +149,6 @@ class JunyiDataBuilder:
             for p in prereqs:
                 if p not in self.exercise2id:
                     self.exercise2id[p] = len(self.exercise2id)
-                    # expand adjacency for unseen prereq
                     new_n = len(self.exercise2id)
                     new_adj = np.eye(new_n, dtype=np.float32)
                     new_adj[: adj.shape[0], : adj.shape[1]] = adj
@@ -109,21 +167,27 @@ class JunyiDataBuilder:
         return self.exercise2id[name]
 
     def build_samples(self, df: pd.DataFrame) -> Dict[str, np.ndarray]:
-        eps = 1e-8
-        elapsed_scale = np.log1p(df["elapsed_time"].values)
-        hint_scale = np.log1p(df["hint_used"].values)
-        e_mean, e_std = elapsed_scale.mean(), elapsed_scale.std() + eps
-        h_mean, h_std = hint_scale.mean(), hint_scale.std() + eps
+        elapsed_raw = np.asarray(df["elapsed_time"].values, dtype=np.float64)
+        hint_raw = np.asarray(df["hint_used"].values, dtype=np.float64)
+        elapsed_scale = np.log1p(np.clip(np.nan_to_num(elapsed_raw, nan=0.0, posinf=0.0, neginf=0.0), 0.0, 1e7))
+        hint_scale = np.log1p(np.clip(np.nan_to_num(hint_raw, nan=0.0, posinf=0.0, neginf=0.0), 0.0, 1e4))
+        elapsed_norm = self._safe_standardize(elapsed_scale)
+        hint_norm = self._safe_standardize(hint_scale)
 
         rows_ex, rows_resp, rows_cont, rows_mask = [], [], [], []
         rows_y, rows_target_ex = [], []
 
-        for _, g in df.groupby("user_id"):
+        # Pre-materialize normalized columns to avoid repeated unstable statistics in group loops.
+        work_df = df.copy()
+        work_df["_elapsed_norm"] = elapsed_norm
+        work_df["_hint_norm"] = hint_norm
+
+        for _, g in work_df.groupby("user_id"):
             g = g.sort_values("timestamp")
-            ex = [self._encode_exercise(str(x)) for x in g["exercise"].tolist()]
+            ex = [self._encode_exercise(str(x)) for x in g["exercise_id"].tolist()]
             resp = g["correct"].astype(int).tolist()
-            elapsed = ((np.log1p(g["elapsed_time"].values) - e_mean) / e_std).astype(np.float32)
-            hints = ((np.log1p(g["hint_used"].values) - h_mean) / h_std).astype(np.float32)
+            elapsed = np.asarray(g["_elapsed_norm"].values, dtype=np.float32)
+            hints = np.asarray(g["_hint_norm"].values, dtype=np.float32)
 
             for i in range(self.cfg.min_history, len(g)):
                 hist_ex = ex[max(0, i - self.cfg.max_seq_len): i]
