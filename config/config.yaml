@@ -1,0 +1,10 @@
+training:
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 50
+  lambda1: 0.1
+  lambda2: 0.2
+
+experiment_windows: [4, 8, full]
+
+metrics: [Accuracy, AUC, F1, Precision, Recall]
