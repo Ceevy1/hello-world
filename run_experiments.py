@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -46,26 +47,46 @@ def run(data_dir: str = "data", output_dir: str = "outputs") -> None:
     out = Path(output_dir)
     out.mkdir(exist_ok=True)
 
+    print(f"[run_experiments] data_dir={Path(data_dir).resolve()}")
+    print(f"[run_experiments] output_dir={out.resolve()}")
+
     train_loader, val_loader, test_loader, graph = build_dataloaders(data_dir)
+    print("[run_experiments] dataloaders ready")
 
     tables = load_oulad_data(data_dir)
     x_seq, x_stat, _, _, y = extract_time_series(tables)
     x_tab = extract_features(x_seq, x_stat)
+    print(f"[run_experiments] dataset prepared: seq={x_seq.shape}, stat={x_stat.shape}, tab={x_tab.shape}, n={len(y)}")
     x_train, x_test, y_train, y_test = train_test_split(x_tab, y, test_size=0.2, random_state=42, stratify=y)
 
     baseline_rows = []
     for name, clf in BASELINES.items():
+        print(f"[run_experiments] training baseline: {name}")
         clf.fit(x_train, y_train)
         prob = clf.predict_proba(x_test)[:, 1] if hasattr(clf, "predict_proba") else clf.decision_function(x_test)
-        baseline_rows.append({"model": name, **eval_prob(y_test, prob)})
+        metrics = eval_prob(y_test, prob)
+        baseline_rows.append({"model": name, **metrics})
+        print(f"  -> AUC={metrics['AUC']:.4f}, Acc={metrics['Accuracy']:.4f}, F1={metrics['F1']:.4f}")
 
+    print("[run_experiments] training DynamicFusion-Enhanced")
     model = DynamicFusionEnhanced(seq_input_dim=x_seq.shape[-1], stat_input_dim=x_stat.shape[-1], graph_input_dim=16)
     fit(model, train_loader, val_loader, graph, TrainConfig(), output_dir=output_dir)
     ours = export_predictions(model, test_loader, graph, output_dir=output_dir)
     baseline_rows.append({"model": "DynamicFusion-Enhanced", "AUC": ours["AUC"], "Accuracy": ours["Accuracy"], "F1": np.nan})
+    print(f"  -> AUC={ours['AUC']:.4f}, Acc={ours['Accuracy']:.4f}")
 
-    pd.DataFrame(baseline_rows).to_csv(out / "experiment_results.csv", index=False)
+    result_path = out / "experiment_results.csv"
+    pd.DataFrame(baseline_rows).to_csv(result_path, index=False)
+    print(f"[run_experiments] done. wrote: {result_path.resolve()}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run OULAD baselines and DynamicFusion-Enhanced experiment")
+    parser.add_argument("--data-dir", default="data", help="Directory containing OULAD CSV files")
+    parser.add_argument("--output-dir", default="outputs", help="Directory to store result artifacts")
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    run()
+    args = parse_args()
+    run(data_dir=args.data_dir, output_dir=args.output_dir)
