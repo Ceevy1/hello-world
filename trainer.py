@@ -174,6 +174,8 @@ def export_predictions(
     repr_arr = np.concatenate(repr_track, axis=0)
     dist = np.linalg.norm(repr_arr[:, None, :] - repr_arr[None, :, :], axis=-1)
     np.save(out / "representation_distances.npy", dist)
+    np.save(out / "representations.npy", repr_arr)
+    np.save(out / "fusion_weights.npy", w_arr)
 
     return {
         "AUC": float(roc_auc_score(yt, yp)) if len(np.unique(yt)) > 1 else float("nan"),

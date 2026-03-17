@@ -188,3 +188,62 @@ def build_dataloaders(
         test_ratio=test_ratio,
         random_state=random_state,
     )
+
+
+def load_junyi_data(
+    log_csv: str | Path | None = None,
+    max_weeks: int = 16,
+    n_fallback: int = 800,
+    seed: int = 7,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Build OULAD-compatible arrays from Junyi interactions, with synthetic fallback."""
+    if log_csv is None:
+        candidates = [Path('data/junyi_ProblemLog_original.csv'), Path('data/junyi_ProblemLog.csv')]
+        log_path = next((c for c in candidates if c.exists()), None)
+    else:
+        log_path = Path(log_csv)
+
+    if log_path is None or (not log_path.exists()):
+        x_seq, x_stat, node_idx, week_idx, y, modules, student_ids = _fallback_synthetic(n=n_fallback, seq_len=max_weeks, seed=seed)
+        modules = np.array([f'junyi_{m}' for m in modules])
+        return x_seq, x_stat, node_idx, week_idx, y, modules, student_ids
+
+    df = pd.read_csv(log_path)
+    rename = {"exercise": "exercise_id", "time_done": "timestamp", "time_taken": "elapsed_time"}
+    for k, v in rename.items():
+        if k in df.columns and v not in df.columns:
+            df[v] = df[k]
+    required = {"user_id", "correct", "timestamp", "elapsed_time"}
+    if not required.issubset(set(df.columns)):
+        x_seq, x_stat, node_idx, week_idx, y, modules, student_ids = _fallback_synthetic(n=n_fallback, seq_len=max_weeks, seed=seed)
+        modules = np.array([f'junyi_{m}' for m in modules])
+        return x_seq, x_stat, node_idx, week_idx, y, modules, student_ids
+
+    dfx = df.copy()
+    dfx["correct"] = pd.to_numeric(dfx["correct"], errors="coerce").fillna(0).clip(0, 1)
+    dfx["elapsed_time"] = pd.to_numeric(dfx["elapsed_time"], errors="coerce").fillna(0).clip(0)
+    dfx["timestamp"] = pd.to_numeric(dfx["timestamp"], errors="coerce")
+    dfx = dfx.dropna(subset=["timestamp"]).sort_values(["user_id", "timestamp"]) 
+
+    users = dfx["user_id"].astype(str).drop_duplicates().to_numpy()
+    u2i = {u: i for i, u in enumerate(users)}
+    x_seq = np.zeros((len(users), max_weeks, 2), dtype=np.float32)
+    x_stat = np.zeros((len(users), 2), dtype=np.float32)
+    week_idx = np.full(len(users), max_weeks - 1, dtype=np.int64)
+
+    for uid, g in dfx.groupby("user_id"):
+        i = u2i[str(uid)]
+        g = g.sort_values("timestamp")
+        g["step"] = np.arange(len(g))
+        g["week"] = np.clip((g["step"] / max(1, len(g)) * max_weeks).astype(int), 0, max_weeks - 1)
+        agg = g.groupby("week").agg(clicks=("correct", "size"), corr=("correct", "mean"))
+        x_seq[i, agg.index, 0] = np.log1p(agg["clicks"].to_numpy())
+        x_seq[i, agg.index, 1] = agg["corr"].to_numpy()
+        x_stat[i, 0] = len(g)
+        x_stat[i, 1] = float(g["correct"].mean())
+
+    y = (x_stat[:, 1] >= np.median(x_stat[:, 1])).astype(np.float32)
+    node_idx = np.arange(len(users), dtype=np.int64)
+    modules = np.array(["JUNYI"] * len(users))
+    student_ids = np.arange(500000, 500000 + len(users))
+    return x_seq, x_stat.astype(np.float32), node_idx, week_idx, y, modules, student_ids
