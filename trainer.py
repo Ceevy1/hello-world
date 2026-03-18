@@ -109,6 +109,12 @@ def fit(model: DynamicFusionEnhanced, train_loader: DataLoader, val_loader: Data
             "val_F1": va["F1"],
         }
         hist.append(row)
+        print(
+            f"[Trainer][epoch={epoch}/{cfg.epochs}] "
+            f"train_loss={tr['train_loss']:.4f} val_loss={va['loss']:.4f} "
+            f"val_AUC={np.nan_to_num(va['AUC'], nan=0.0):.4f} val_Accuracy={va['Accuracy']:.4f} "
+            f"val_Precision={va['Precision']:.4f} val_Recall={va['Recall']:.4f} val_F1={va['F1']:.4f}"
+        )
         if np.nan_to_num(va["AUC"], nan=0.0) > best_auc:
             best_auc = np.nan_to_num(va["AUC"], nan=0.0)
             best_state = model.state_dict()
@@ -177,10 +183,16 @@ def export_predictions(
     np.save(out / "representations.npy", repr_arr)
     np.save(out / "fusion_weights.npy", w_arr)
 
-    return {
+    metrics = {
         "AUC": float(roc_auc_score(yt, yp)) if len(np.unique(yt)) > 1 else float("nan"),
         "Accuracy": float(accuracy_score(yt, (yp >= 0.5).astype(int))),
         "Precision": float(precision_score(yt, (yp >= 0.5).astype(int), zero_division=0)),
         "Recall": float(recall_score(yt, (yp >= 0.5).astype(int), zero_division=0)),
         "F1": float(f1_score(yt, (yp >= 0.5).astype(int), zero_division=0)),
     }
+    print(
+        f"[Trainer][test] AUC={np.nan_to_num(metrics['AUC'], nan=0.0):.4f} "
+        f"Accuracy={metrics['Accuracy']:.4f} Precision={metrics['Precision']:.4f} "
+        f"Recall={metrics['Recall']:.4f} F1={metrics['F1']:.4f}"
+    )
+    return metrics
