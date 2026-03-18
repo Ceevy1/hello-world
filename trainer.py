@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -111,7 +112,7 @@ def fit(model: DynamicFusionEnhanced, train_loader: DataLoader, val_loader: Data
         hist.append(row)
         if np.nan_to_num(va["AUC"], nan=0.0) > best_auc:
             best_auc = np.nan_to_num(va["AUC"], nan=0.0)
-            best_state = model.state_dict()
+            best_state = deepcopy(model.state_dict())
 
     pd.DataFrame(hist).to_csv(out / "loss_curve.csv", index=False)
     if best_state is not None:
