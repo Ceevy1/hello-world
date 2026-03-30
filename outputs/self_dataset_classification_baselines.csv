@@ -1,0 +1,10 @@
+﻿Model,Accuracy,F1,AUC
+SVC,1.0,1.0,
+LogisticRegression,0.0,0.0,
+LinearSVC,0.0,0.0,
+KNNClassifier,0.0,0.0,
+RandomForestClassifier,0.0,0.0,
+GradientBoostingClassifier,0.0,0.0,
+AdaBoostClassifier,0.0,0.0,
+GaussianNB,0.0,0.0,
+DynamicFusion,0.0,0.0,
