@@ -280,3 +280,35 @@ python run_junyi_experiments.py --use_synthetic_if_missing
 ```bash
 JUNYI_DATA_DIR=/path/to/data python run_junyi_experiments.py
 ```
+
+## Self-Collected Dataset Experiment (New)
+
+Added a standalone pipeline for score-driven classroom data with the following columns:
+`序号, 考勤, 练习1-3, 总平时 成绩, 实验1-7, 报告, 总实验 成绩, 平时成绩, 总期末成绩, 总评成绩`.
+
+### New files
+
+- `preprocessing.py`: missing-value handling, split, standardization, and 4-class label construction.
+- `dataset.py`: `StudentDataset` returning `exercise/lab/static/label`.
+- `model/dynamic_fusion.py`: DynamicFusion adapted to `[练习序列]+[实验序列]+[静态特征]` for regression/classification.
+- `train.py`: Adam (`lr=1e-3`), early stopping, train/val/test routine.
+- `evaluate.py`: MAE/RMSE/R2 and Accuracy/F1/AUC.
+- `shap_analysis.py`: SHAP explainer entry for interpretability.
+
+### Run
+
+```bash
+python train.py
+```
+
+### Baseline comparison (>=8 baselines)
+
+```bash
+python baseline_compare.py
+```
+
+This exports:
+- `outputs/self_dataset_regression_baselines.csv`
+- `outputs/self_dataset_classification_baselines.csv`
+
+Each table includes at least 8 classical baselines and `DynamicFusion` for side-by-side comparison.
