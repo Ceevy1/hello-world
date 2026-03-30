@@ -300,3 +300,15 @@ Added a standalone pipeline for score-driven classroom data with the following c
 ```bash
 python train.py
 ```
+
+### Baseline comparison (>=8 baselines)
+
+```bash
+python baseline_compare.py
+```
+
+This exports:
+- `outputs/self_dataset_regression_baselines.csv`
+- `outputs/self_dataset_classification_baselines.csv`
+
+Each table includes at least 8 classical baselines and `DynamicFusion` for side-by-side comparison.
