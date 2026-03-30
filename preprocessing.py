@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Tuple
 
 import pandas as pd
@@ -34,7 +35,7 @@ def preprocess_scores(
     random_state: int = 42,
     standardize: bool = True,
 ) -> PreparedData:
-    df = pd.read_csv(csv_path)
+    df = _read_score_csv(csv_path)
     for col in [ID_COL] + EXERCISE_COLS + LAB_COLS + STATIC_COLS + [TARGET_COL]:
         if col not in df.columns:
             raise ValueError(f"Missing required column: {col}")
@@ -71,3 +72,29 @@ def build_classification_labels(df: pd.DataFrame, score_col: str = TARGET_COL) -
     df = df.copy()
     df["label_cls"] = pd.cut(df[score_col], bins=bins, labels=False, right=False)
     return df, 4
+
+
+def _read_score_csv(csv_path: str) -> pd.DataFrame:
+    """Read CSV robustly across Windows/Excel encodings."""
+    path = Path(csv_path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Dataset file not found: {path.resolve()}. "
+            "Please pass an existing path (e.g. TrainConfig(csv_path='data/student_scores.csv'))."
+        )
+
+    tried: list[str] = []
+    for encoding in ["utf-8-sig", "utf-8", "gb18030", "gbk"]:
+        try:
+            return pd.read_csv(path, encoding=encoding)
+        except UnicodeDecodeError:
+            tried.append(encoding)
+
+    raise UnicodeDecodeError(
+        "csv",
+        b"",
+        0,
+        1,
+        f"Failed to decode {path.name}. Tried encodings: {', '.join(tried)}. "
+        "Please convert the CSV to UTF-8 (recommended) or specify a supported encoding.",
+    )
