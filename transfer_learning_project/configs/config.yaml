@@ -1,0 +1,89 @@
+project:
+  name: OULAD_to_Custom_Transfer
+  seed: 42
+  device: cpu
+  log_level: INFO
+  save_dir: ./results
+
+data:
+  source:
+    path: ./data/processed/source_features.pkl
+    n_samples: null
+  target:
+    path: ./data/raw/custom/custom_dataset.xlsx
+    test_size: 0.2
+    val_size: 0.15
+    stratify: true
+  task_type: both
+  classification_bins: [0, 60, 70, 80, 90, 100]
+  classification_labels: [不及格, 及格, 中, 良, 优]
+
+custom_dataset:
+  columns:
+    exam_score: '考分f'
+    exercise_1: '练习1'
+    exercise_2: '练习2'
+    exercise_3: '练习3'
+    exercise_total: '总平时成绩'
+    lab_1: '实验1'
+    lab_2: '实验2'
+    lab_3: '实验3'
+    lab_4: '实验4'
+    lab_5: '实验5'
+    lab_6: '实验6'
+    lab_7: '实验7'
+    report: '报告'
+    lab_total: '总实验成绩'
+    regular_score: '平时成绩'
+    final_score: '总期末成绩'
+    target: '总评成绩'
+  target_type: regression
+  classification_bins: [0, 60, 70, 80, 90, 100]
+  classification_labels: [不及格, 及格, 中, 良, 优]
+
+feature_engineering:
+  missing_strategy: knn
+  outlier_method: iqr
+  normalization: standard
+  construct_derived: true
+  importance_threshold: 0.01
+
+domain_adaptation:
+  strategies: [none, coral, tca, quantile, dann]
+  coral:
+    lambda_coral: 1.0
+  tca:
+    n_components: 10
+    kernel: rbf
+    mu: 1.0
+  dann:
+    hidden_dim: 128
+    lambda_adv: 0.1
+    lr: 0.001
+    epochs: 100
+
+transfer:
+  pretrained_model_path: ./pretrained/oulad_model.pkl
+  finetune_strategies: [FT-1, FT-2, FT-3, FT-4]
+
+training:
+  early_stopping:
+    patience: 10
+    monitor: val_loss
+    mode: min
+  cross_validation:
+    strategy: auto
+    n_splits: 5
+
+evaluation:
+  metrics:
+    regression: [mae, rmse, r2, mape]
+    classification: [accuracy, macro_f1, weighted_f1, kappa]
+  significance_test: true
+  alpha: 0.05
+
+visualization:
+  format: [png, pdf]
+  dpi: 300
+  style: seaborn-v0_8-whitegrid
+  color_palette: ['#2196F3', '#FF5722', '#4CAF50', '#FF9800', '#9C27B0']
