@@ -312,3 +312,23 @@ This exports:
 - `outputs/self_dataset_classification_baselines.csv`
 
 Each table includes at least 8 classical baselines and `DynamicFusion` for side-by-side comparison.
+
+## Self-Collected Dataset: Reconstructed 5-Fold Experiment (Attention+Cross)
+
+Run the rebuilt experiment pipeline:
+
+```bash
+python self_dataset_experiment.py
+```
+
+Key settings implemented:
+- Tabular DynamicFusion with **Attention + Cross** structure
+- Loss = **Huber + Ranking loss**
+- **Feature crossing**
+- **Standardization (mandatory, fold-wise to avoid leakage)**
+- **5-fold K-Fold CV**
+- Baselines (>=8) + **GradientBoosting Stacking**
+
+Outputs:
+- `outputs/self_dataset_5fold_metrics.csv`
+- `outputs/self_dataset_5fold_summary.csv`
