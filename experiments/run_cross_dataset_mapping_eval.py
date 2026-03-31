@@ -1,25 +1,22 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-import sys
-
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import Ridge
 from sklearn.metrics import accuracy_score, mean_absolute_error, mean_squared_error
 from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-XGBClassifier = None
-XGBRegressor = None
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from data_preprocessing import OULADDatasetBuilder
 
@@ -44,14 +41,8 @@ SELF_REQUIRED_COLUMNS = [
     "总评成绩",
 ]
 
-UNIFIED_FEATURES = [
-    "performance_assessment",
-    "engagement_activity",
-    "behavior_stability",
-    "practice_mastery",
-    "report_quality",
-    "consistency_index",
-]
+# 统一语义空间（跨数据集共享）
+COMMON_FEATURES = ["engagement", "performance", "behavior", "background"]
 
 
 @dataclass
@@ -63,179 +54,222 @@ class DomainData:
 
 
 class DynamicFusionRegressor:
-    """Simple modality-weighted regressor used as dynamic fusion baseline."""
+    """基于语义特征组权重的轻量动态融合回归模型。"""
 
     def __init__(self) -> None:
         self.weights_: np.ndarray | None = None
-        self.model = make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(32, 16), max_iter=300, random_state=42))
+        self.model = make_pipeline(
+            StandardScaler(),
+            MLPRegressor(hidden_layer_sizes=(32, 16), random_state=42, max_iter=300),
+        )
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "DynamicFusionRegressor":
+        # 用单特征 Ridge 拟合误差反推特征组权重（可解释 + 稳定）
         w = []
-        for cols in ([0, 3], [1, 4], [2, 5]):
-            lr = LinearRegression().fit(X[:, cols], y)
-            pred = lr.predict(X[:, cols])
+        for i in range(X.shape[1]):
+            reg = Ridge(alpha=1.0).fit(X[:, [i]], y)
+            pred = reg.predict(X[:, [i]])
             rmse = float(np.sqrt(mean_squared_error(y, pred)))
             w.append(1.0 / max(rmse, 1e-6))
-        self.weights_ = np.array(w, dtype=np.float32)
-        self.weights_ = self.weights_ / self.weights_.sum()
-        X_fused = self._fuse(X)
-        self.model.fit(X_fused, y)
+        self.weights_ = np.asarray(w, dtype=np.float32)
+        self.weights_ /= self.weights_.sum()
+        self.model.fit(self._fuse(X), y)
         return self
 
     def _fuse(self, X: np.ndarray) -> np.ndarray:
         assert self.weights_ is not None
-        perf = X[:, [0, 3]] * self.weights_[0]
-        eng = X[:, [1, 4]] * self.weights_[1]
-        beh = X[:, [2, 5]] * self.weights_[2]
-        return np.concatenate([perf, eng, beh], axis=1)
+        return X * self.weights_[None, :]
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         return self.model.predict(self._fuse(X))
 
 
 class DynamicFusionClassifier:
-    """Simple modality-weighted classifier used as dynamic fusion baseline."""
+    """复用动态融合权重的分类模型。"""
 
     def __init__(self) -> None:
-        self.reg = DynamicFusionRegressor()
-        self.clf = make_pipeline(StandardScaler(), MLPClassifier(hidden_layer_sizes=(32, 16), max_iter=200, random_state=42))
+        self.fusion = DynamicFusionRegressor()
+        self.clf = make_pipeline(
+            StandardScaler(),
+            MLPClassifier(hidden_layer_sizes=(32, 16), random_state=42, max_iter=300),
+        )
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> "DynamicFusionClassifier":
-        self.reg.fit(X, y.astype(np.float32))
-        self.clf.fit(self.reg._fuse(X), y)
+        self.fusion.fit(X, y.astype(np.float32))
+        self.clf.fit(self.fusion._fuse(X), y)
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        return self.clf.predict(self.reg._fuse(X))
+        return self.clf.predict(self.fusion._fuse(X))
 
 
-def _minmax(series: pd.Series) -> pd.Series:
-    vmin = float(series.min())
-    vmax = float(series.max())
-    if vmax - vmin < 1e-12:
-        return pd.Series(np.zeros(len(series), dtype=np.float32), index=series.index)
-    return (series - vmin) / (vmax - vmin)
+def clean_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """标准化列名并自动修复重复列冲突。"""
+    out = df.copy()
+    out.columns = [str(c).strip() for c in out.columns]
+    if out.columns.duplicated().any():
+        # 自动修复重复列：同名列聚合求均值
+        out = out.T.groupby(level=0).mean().T
+    return out
+
+
+def safe_series(df: pd.DataFrame, col: str) -> pd.Series:
+    """安全取列：缺失补零，重复列聚合，统一返回数值 Series。"""
+    if col not in df.columns:
+        return pd.Series(np.zeros(len(df), dtype=np.float32), index=df.index)
+
+    values = df.loc[:, col]
+    if isinstance(values, pd.DataFrame):
+        values = values.apply(pd.to_numeric, errors="coerce").mean(axis=1)
+    else:
+        values = pd.to_numeric(values, errors="coerce")
+    return values.fillna(0.0).astype(np.float32)
+
+
+def minmax(series: pd.Series | np.ndarray) -> pd.Series:
+    x = pd.Series(series).astype(np.float32)
+    xmin, xmax = float(x.min()), float(x.max())
+    if abs(xmax - xmin) < 1e-12:
+        return pd.Series(np.zeros(len(x), dtype=np.float32), index=x.index)
+    return (x - xmin) / (xmax - xmin)
+
+
+def build_self_features(raw: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+    df = clean_columns(raw)
+    missing = [c for c in SELF_REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"students_scores.csv 缺失必要列: {missing}")
+
+    exercise_mean = df[["练习1", "练习2", "练习3"]].apply(pd.to_numeric, errors="coerce").mean(axis=1)
+    lab_cols = [f"实验{i}" for i in range(1, 8)]
+    lab_values = df[lab_cols].apply(pd.to_numeric, errors="coerce")
+    lab_mean = lab_values.mean(axis=1)
+    lab_std = lab_values.std(axis=1).fillna(0.0)
+
+    features = pd.DataFrame(index=df.index)
+    features["engagement"] = minmax((safe_series(df, "考勤") + safe_series(df, "平时成绩")) / 2.0)
+    features["performance"] = minmax((exercise_mean + safe_series(df, "总平时 成绩") + safe_series(df, "总实验 成绩")) / 3.0)
+    features["behavior"] = minmax(1.0 / (1.0 + lab_std))
+    features["background"] = minmax((safe_series(df, "报告") + safe_series(df, "总期末成绩") + lab_mean) / 3.0)
+
+    y_reg = safe_series(df, "总评成绩").to_numpy(dtype=np.float32)
+    y_cls = (y_reg >= 60).astype(np.int64)
+    return features[COMMON_FEATURES], y_reg, y_cls
+
+
+def build_oulad_features(tab: pd.DataFrame) -> pd.DataFrame:
+    """按语义映射构造 OULAD 公共特征。"""
+    df = clean_columns(tab)
+    features = pd.DataFrame(index=df.index)
+
+    # engagement: 交互活跃度
+    features["engagement"] = minmax(
+        0.7 * safe_series(df, "total_clicks").to_numpy() + 0.3 * safe_series(df, "active_weeks").to_numpy()
+    )
+    # performance: 学习表现代理（点击质量 + 早期投入）
+    features["performance"] = minmax(
+        0.5 * safe_series(df, "mean_clicks").to_numpy()
+        + 0.3 * safe_series(df, "early_click_ratio").to_numpy()
+        + 0.2 * safe_series(df, "max_weekly_clicks").to_numpy()
+    )
+    # behavior: 稳定行为（波动越小越好）
+    features["behavior"] = minmax(
+        1.0
+        / (
+            1.0
+            + np.abs(safe_series(df, "click_cv").to_numpy())
+            + np.abs(safe_series(df, "growth_rate").to_numpy())
+        )
+    )
+    # background: 学习背景/先验准备
+    features["background"] = minmax(
+        0.6 * safe_series(df, "studied_credits").to_numpy()
+        + 0.4 * safe_series(df, "num_of_prev_attempts").to_numpy()
+    )
+    return features[COMMON_FEATURES]
 
 
 def load_self_domain(self_scores_path: str) -> DomainData:
-    df = pd.read_csv(self_scores_path, encoding="utf-8-sig")
-    missing = [c for c in SELF_REQUIRED_COLUMNS if c not in df.columns]
-    if missing:
-        raise ValueError(f"students_scores.csv 缺失列: {missing}")
-
-    practice_mean = df[["练习1", "练习2", "练习3"]].mean(axis=1)
-    lab_mean = df[[f"实验{i}" for i in range(1, 8)]].mean(axis=1)
-    practice_std = df[["练习1", "练习2", "练习3"]].std(axis=1).fillna(0)
-    lab_std = df[[f"实验{i}" for i in range(1, 8)]].std(axis=1).fillna(0)
-
-    aligned = pd.DataFrame(
-        {
-            "performance_assessment": _minmax((practice_mean + df["总平时 成绩"] + df["总实验 成绩"]) / 3.0),
-            "engagement_activity": _minmax((df["考勤"] + df["平时成绩"]) / 2.0),
-            "behavior_stability": _minmax(1.0 / (1.0 + practice_std + lab_std)),
-            "practice_mastery": _minmax((practice_mean + lab_mean) / 2.0),
-            "report_quality": _minmax((df["报告"] + df["总期末成绩"]) / 2.0),
-            "consistency_index": _minmax(df["平时成绩"] - df["总期末成绩"]).abs().rsub(1.0),
-        }
-    )
-
-    y_reg = df["总评成绩"].to_numpy(dtype=np.float32)
-    y_cls = (y_reg >= 60).astype(np.int64)
-    return DomainData(name="SelfDataset", X=aligned[UNIFIED_FEATURES], y_reg=y_reg, y_cls=y_cls)
+    raw = pd.read_csv(self_scores_path, encoding="utf-8-sig")
+    X, y_reg, y_cls = build_self_features(raw)
+    return DomainData(name="SelfDataset", X=X, y_reg=y_reg, y_cls=y_cls)
 
 
 def load_oulad_domain(data_dir: str) -> DomainData:
     ds = OULADDatasetBuilder(data_dir=data_dir).build()
     tab = pd.DataFrame(ds["tabular"], columns=ds["tab_feature_names"])
-    if tab.columns.duplicated().any():
-        # 某些预处理流程会产生重复列名（例如静态特征被重复拼接），
-        # 这里按列名聚合求均值，避免后续算术运算触发 duplicate-label reindex 错误。
-        tab = tab.T.groupby(level=0).mean().T
-
-    def pick(col: str) -> pd.Series:
-        if col not in tab.columns:
-            return pd.Series(np.zeros(len(tab), dtype=np.float32), index=tab.index)
-
-        values = tab.loc[:, col]
-        if isinstance(values, pd.DataFrame):
-            values = values.apply(pd.to_numeric, errors="coerce").mean(axis=1)
-        else:
-            values = pd.to_numeric(values, errors="coerce")
-        return values.fillna(0.0).astype(np.float32)
-
-    aligned = pd.DataFrame(
-        {
-            "performance_assessment": _minmax(0.5 * pick("mean_clicks") + 0.3 * pick("early_click_ratio") + 0.2 * pick("max_weekly_clicks")),
-            "engagement_activity": _minmax(0.6 * pick("total_clicks") + 0.4 * pick("active_weeks")),
-            "behavior_stability": _minmax(1.0 / (1.0 + np.abs(pick("click_cv")) + np.abs(pick("growth_rate")))),
-            "practice_mastery": _minmax(0.7 * pick("mean_clicks") + 0.3 * pick("studied_credits")),
-            "report_quality": _minmax(0.6 * pick("early_click_ratio") + 0.4 * pick("behavior_entropy")),
-            "consistency_index": _minmax(1.0 / (1.0 + np.abs(pick("std_clicks")))),
-        }
-    )
-
+    X = build_oulad_features(tab)
     y_reg = ds["y_reg"].astype(np.float32)
     y_cls = (y_reg >= 60).astype(np.int64)
-    return DomainData(name="OULAD", X=aligned[UNIFIED_FEATURES], y_reg=y_reg, y_cls=y_cls)
+    return DomainData(name="OULAD", X=X, y_reg=y_reg, y_cls=y_cls)
 
 
-def build_models(task: str) -> list[tuple[str, object]]:
-    if task == "regression":
-        models: list[tuple[str, object]] = [
-            ("RandomForest", RandomForestRegressor(n_estimators=120, random_state=42, n_jobs=-1)),
-            ("MLP", make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 32), max_iter=200, random_state=42))),
-            ("DynamicFusion", DynamicFusionRegressor()),
-        ]
-        if XGBRegressor is not None:
-            models.insert(1, ("XGBoost", XGBRegressor(n_estimators=300, max_depth=4, learning_rate=0.05, objective="reg:squarederror", random_state=42)))
-        return models
+def coral_align(source: np.ndarray, target: np.ndarray) -> np.ndarray:
+    """CORAL: source covariance alignment to target covariance."""
+    eps = 1e-5
+    cs = np.cov(source, rowvar=False) + eps * np.eye(source.shape[1])
+    ct = np.cov(target, rowvar=False) + eps * np.eye(target.shape[1])
 
-    models = [
-        ("RandomForest", RandomForestClassifier(n_estimators=120, random_state=42, n_jobs=-1)),
-        ("MLP", make_pipeline(StandardScaler(), MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=250, random_state=42))),
-        ("DynamicFusion", DynamicFusionClassifier()),
+    vals_s, vecs_s = np.linalg.eigh(cs)
+    vals_t, vecs_t = np.linalg.eigh(ct)
+    cs_inv_sqrt = vecs_s @ np.diag(1.0 / np.sqrt(np.clip(vals_s, eps, None))) @ vecs_s.T
+    ct_sqrt = vecs_t @ np.diag(np.sqrt(np.clip(vals_t, eps, None))) @ vecs_t.T
+    return (source - source.mean(axis=0)) @ cs_inv_sqrt @ ct_sqrt + target.mean(axis=0)
+
+
+def build_regressors() -> list[tuple[str, object]]:
+    return [
+        ("RandomForest", RandomForestRegressor(n_estimators=120, random_state=42, n_jobs=-1)),
+        ("MLP", make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 32), random_state=42, max_iter=250))),
+        ("DynamicFusion", DynamicFusionRegressor()),
     ]
-    if XGBClassifier is not None:
-        models.insert(1, ("XGBoost", XGBClassifier(n_estimators=300, max_depth=4, learning_rate=0.05, random_state=42, eval_metric="logloss")))
-    return models
 
 
-def evaluate_transfer(train_domain: DomainData, test_domain: DomainData) -> pd.DataFrame:
+def build_classifiers() -> dict[str, object]:
+    return {
+        "RandomForest": RandomForestClassifier(n_estimators=120, random_state=42, n_jobs=-1),
+        "MLP": make_pipeline(StandardScaler(), MLPClassifier(hidden_layer_sizes=(64, 32), random_state=42, max_iter=300)),
+        "DynamicFusion": DynamicFusionClassifier(),
+    }
+
+
+def evaluate_transfer(train_domain: DomainData, test_domain: DomainData, adaptation: str) -> pd.DataFrame:
     rows: list[dict[str, float | str]] = []
+    x_train = train_domain.X.to_numpy(dtype=np.float32)
+    x_test = test_domain.X.to_numpy(dtype=np.float32)
+    y_train_reg, y_test_reg = train_domain.y_reg, test_domain.y_reg
+    y_train_cls, y_test_cls = train_domain.y_cls, test_domain.y_cls
 
-    X_train = train_domain.X.to_numpy(dtype=np.float32)
-    X_test = test_domain.X.to_numpy(dtype=np.float32)
+    if adaptation == "coral":
+        x_train = coral_align(x_train, x_test)
 
-    for model_name, model in build_models("regression"):
-        model.fit(X_train, train_domain.y_reg)
-        pred_reg = model.predict(X_test)
-        mae = mean_absolute_error(test_domain.y_reg, pred_reg)
-        rmse = float(np.sqrt(mean_squared_error(test_domain.y_reg, pred_reg)))
+    cls_models = build_classifiers()
+    for name, reg_model in build_regressors():
+        reg_model.fit(x_train, y_train_reg)
+        pred_reg = reg_model.predict(x_test)
+        mae = float(mean_absolute_error(y_test_reg, pred_reg))
+        rmse = float(np.sqrt(mean_squared_error(y_test_reg, pred_reg)))
 
-        train_classes = np.unique(train_domain.y_cls)
-        if train_classes.size < 2:
-            pred_cls = np.full(len(X_test), train_classes[0], dtype=np.int64)
+        classes = np.unique(y_train_cls)
+        if classes.size < 2:
+            pred_cls = np.full(len(x_test), classes[0], dtype=np.int64)
         else:
-            clf_model = dict(build_models("classification"))[model_name]
-            try:
-                clf_model.fit(X_train, train_domain.y_cls)
-                pred_cls = clf_model.predict(X_test)
-            except Exception:  # noqa: BLE001
-                majority = int(np.bincount(train_domain.y_cls).argmax())
-                pred_cls = np.full(len(X_test), majority, dtype=np.int64)
-        acc = accuracy_score(test_domain.y_cls, pred_cls)
+            clf = cls_models[name]
+            clf.fit(x_train, y_train_cls)
+            pred_cls = clf.predict(x_test)
+        acc = float(accuracy_score(y_test_cls, pred_cls))
 
         rows.append(
             {
+                "adaptation": adaptation,
                 "train_domain": train_domain.name,
                 "test_domain": test_domain.name,
-                "model": model_name,
-                "accuracy": round(float(acc), 4),
-                "MAE": round(float(mae), 4),
-                "RMSE": round(float(rmse), 4),
+                "model": name,
+                "accuracy": round(acc, 4),
+                "MAE": round(mae, 4),
+                "RMSE": round(rmse, 4),
             }
         )
-
     return pd.DataFrame(rows)
 
 
@@ -243,30 +277,33 @@ def run(self_scores_path: str, data_dir: str, output_path: str) -> pd.DataFrame:
     self_domain = load_self_domain(self_scores_path)
     oulad_domain = load_oulad_domain(data_dir)
 
-    all_results = pd.concat(
-        [
-            evaluate_transfer(self_domain, self_domain),
-            evaluate_transfer(self_domain, oulad_domain),
-            evaluate_transfer(oulad_domain, self_domain),
-            evaluate_transfer(oulad_domain, oulad_domain),
-        ],
-        ignore_index=True,
-    )
+    settings = [
+        (self_domain, self_domain),
+        (self_domain, oulad_domain),
+        (oulad_domain, self_domain),
+        (oulad_domain, oulad_domain),
+    ]
+
+    all_parts: list[pd.DataFrame] = []
+    for adaptation in ("none", "coral"):
+        for tr, te in settings:
+            all_parts.append(evaluate_transfer(tr, te, adaptation=adaptation))
+    result = pd.concat(all_parts, ignore_index=True)
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    all_results.to_csv(out, index=False, encoding="utf-8-sig")
-    return all_results
+    result.to_csv(out, index=False, encoding="utf-8-sig")
+    return result
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Cross-dataset feature mapping + transfer evaluation")
-    parser.add_argument("--self_scores", default="data/student_scores.csv", help="Path to students_scores.csv")
-    parser.add_argument("--oulad_data_dir", default="data", help="Directory containing OULAD CSV tables")
-    parser.add_argument("--output", default="outputs/cross_dataset_mapping_metrics.csv", help="Result CSV path")
+    parser = argparse.ArgumentParser(description="Cross-dataset mapping + transfer evaluation")
+    parser.add_argument("--self_scores", default="data/student_scores.csv")
+    parser.add_argument("--oulad_data_dir", default="data")
+    parser.add_argument("--output", default="outputs/cross_dataset_mapping_metrics.csv")
     args = parser.parse_args()
 
-    result = run(self_scores_path=args.self_scores, data_dir=args.oulad_data_dir, output_path=args.output)
+    result = run(args.self_scores, args.oulad_data_dir, args.output)
     print(result)
     print(f"Saved to: {args.output}")
 
