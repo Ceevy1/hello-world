@@ -22,7 +22,7 @@ def parse_args() -> argparse.Namespace:
 
 def parse_phase_arg(phase_arg: str) -> list[int]:
     if phase_arg == "all":
-        return [0, 1, 2, 3, 4, 5]
+        return [0, 1, 2, 3, 4, 5, 6]
     if "-" in phase_arg:
         start, end = map(int, phase_arg.split("-"))
         return list(range(start, end + 1))
@@ -57,6 +57,10 @@ def run_experiment(config: dict, phases: list[int], debug: bool = False) -> None
         from experiments.run_phase5_ablation import run_phase5
 
         run_phase5(config, logger)
+    if 6 in phases:
+        from experiments.run_phase6_generalization import run_phase6
+
+        run_phase6(config, logger)
 
 
 if __name__ == "__main__":
