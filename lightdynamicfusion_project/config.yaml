@@ -1,0 +1,28 @@
+project:
+  name: 'LightDynamicFusion_Custom'
+  seed: 42
+  output_dir: './lightdynamicfusion_project/results'
+
+data:
+  path: './data/student_scores.csv'
+  target_col: '总评成绩'
+  task: 'both'
+  class_bins: [0,60,70,80,90,100]
+  class_labels: ['不及格','及格','中','良','优']
+
+augmentation:
+  enabled: true
+  method: 'gaussian'
+  noise_std: 1.5
+  multiplier: 5
+  mixup_alpha: 0.2
+
+model:
+  base_estimator: 'ridge'
+  fusion_method: 'learned_stage'
+  stages: ['T1', 'T2', 'T3', 'T4']
+
+cv:
+  strategy: 'auto'
+  n_splits: 5
+  n_repeats: 3
