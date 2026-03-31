@@ -8,18 +8,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.linear_model import LogisticRegression
 from sklearn.linear_model import Ridge
 from sklearn.metrics import accuracy_score, mean_absolute_error, mean_squared_error
 from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVR
-
-try:
-    from scipy.stats import wasserstein_distance
-except Exception:  # noqa: BLE001
-    wasserstein_distance = None
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -160,9 +153,7 @@ def build_self_features(raw: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, np
     features["background"] = minmax((safe_series(df, "报告") + safe_series(df, "总期末成绩") + lab_mean) / 3.0)
 
     y_reg = safe_series(df, "总评成绩").to_numpy(dtype=np.float32)
-    # 防止单一类别导致 accuracy 虚高/训练失效：使用数据驱动阈值
-    threshold = float(np.median(y_reg))
-    y_cls = (y_reg >= threshold).astype(np.int64)
+    y_cls = (y_reg >= 60).astype(np.int64)
     return features[COMMON_FEATURES], y_reg, y_cls
 
 
@@ -209,8 +200,7 @@ def load_oulad_domain(data_dir: str) -> DomainData:
     tab = pd.DataFrame(ds["tabular"], columns=ds["tab_feature_names"])
     X = build_oulad_features(tab)
     y_reg = ds["y_reg"].astype(np.float32)
-    threshold = float(np.median(y_reg))
-    y_cls = (y_reg >= threshold).astype(np.int64)
+    y_cls = (y_reg >= 60).astype(np.int64)
     return DomainData(name="OULAD", X=X, y_reg=y_reg, y_cls=y_cls)
 
 
@@ -229,7 +219,6 @@ def coral_align(source: np.ndarray, target: np.ndarray) -> np.ndarray:
 
 def build_regressors() -> list[tuple[str, object]]:
     return [
-        ("SVR", make_pipeline(StandardScaler(), SVR(C=1.0, epsilon=0.1))),
         ("RandomForest", RandomForestRegressor(n_estimators=120, random_state=42, n_jobs=-1)),
         ("MLP", make_pipeline(StandardScaler(), MLPRegressor(hidden_layer_sizes=(64, 32), random_state=42, max_iter=250))),
         ("DynamicFusion", DynamicFusionRegressor()),
@@ -238,46 +227,10 @@ def build_regressors() -> list[tuple[str, object]]:
 
 def build_classifiers() -> dict[str, object]:
     return {
-        "SVR": make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000, random_state=42)),
         "RandomForest": RandomForestClassifier(n_estimators=120, random_state=42, n_jobs=-1),
         "MLP": make_pipeline(StandardScaler(), MLPClassifier(hidden_layer_sizes=(64, 32), random_state=42, max_iter=300)),
         "DynamicFusion": DynamicFusionClassifier(),
     }
-
-
-def compute_domain_shift(source: DomainData, target: DomainData) -> pd.DataFrame:
-    rows = []
-    for feat in COMMON_FEATURES:
-        s = source.X[feat].to_numpy(dtype=np.float32)
-        t = target.X[feat].to_numpy(dtype=np.float32)
-        if wasserstein_distance is not None:
-            dist = float(wasserstein_distance(s, t))
-        else:
-            dist = float(abs(np.mean(s) - np.mean(t)))
-        rows.append({"feature": feat, "distance": round(dist, 6)})
-    return pd.DataFrame(rows)
-
-
-def compute_generalization_drop(result: pd.DataFrame) -> pd.DataFrame:
-    rows = []
-    for (adapt, model), grp in result.groupby(["adaptation", "model"]):
-        in_domain = grp[grp["train_domain"] == grp["test_domain"]]
-        cross_domain = grp[grp["train_domain"] != grp["test_domain"]]
-        if in_domain.empty or cross_domain.empty:
-            continue
-        rmse_in = float(in_domain["RMSE"].mean())
-        rmse_cross = float(cross_domain["RMSE"].mean())
-        drop = (rmse_cross - rmse_in) / max(rmse_in, 1e-8)
-        rows.append(
-            {
-                "adaptation": adapt,
-                "model": model,
-                "in_domain_RMSE": round(rmse_in, 4),
-                "cross_domain_RMSE": round(rmse_cross, 4),
-                "generalization_drop": round(drop, 4),
-            }
-        )
-    return pd.DataFrame(rows).sort_values(["adaptation", "generalization_drop"], ascending=[True, False]).reset_index(drop=True)
 
 
 def evaluate_transfer(train_domain: DomainData, test_domain: DomainData, adaptation: str) -> pd.DataFrame:
@@ -340,13 +293,6 @@ def run(self_scores_path: str, data_dir: str, output_path: str) -> pd.DataFrame:
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(out, index=False, encoding="utf-8-sig")
-
-    # 附加分析表：泛化下降率 & 分布差异
-    drop_df = compute_generalization_drop(result)
-    drop_df.to_csv(out.parent / "generalization_drop.csv", index=False, encoding="utf-8-sig")
-
-    shift_df = compute_domain_shift(self_domain, oulad_domain)
-    shift_df.to_csv(out.parent / "domain_shift_distance.csv", index=False, encoding="utf-8-sig")
     return result
 
 
