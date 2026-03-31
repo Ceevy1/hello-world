@@ -147,9 +147,21 @@ def load_self_domain(self_scores_path: str) -> DomainData:
 def load_oulad_domain(data_dir: str) -> DomainData:
     ds = OULADDatasetBuilder(data_dir=data_dir).build()
     tab = pd.DataFrame(ds["tabular"], columns=ds["tab_feature_names"])
+    if tab.columns.duplicated().any():
+        # 某些预处理流程会产生重复列名（例如静态特征被重复拼接），
+        # 这里按列名聚合求均值，避免后续算术运算触发 duplicate-label reindex 错误。
+        tab = tab.T.groupby(level=0).mean().T
 
     def pick(col: str) -> pd.Series:
-        return tab[col] if col in tab.columns else pd.Series(np.zeros(len(tab)), index=tab.index)
+        if col not in tab.columns:
+            return pd.Series(np.zeros(len(tab), dtype=np.float32), index=tab.index)
+
+        values = tab.loc[:, col]
+        if isinstance(values, pd.DataFrame):
+            values = values.apply(pd.to_numeric, errors="coerce").mean(axis=1)
+        else:
+            values = pd.to_numeric(values, errors="coerce")
+        return values.fillna(0.0).astype(np.float32)
 
     aligned = pd.DataFrame(
         {
