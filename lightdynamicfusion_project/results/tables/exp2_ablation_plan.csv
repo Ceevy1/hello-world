@@ -1,0 +1,8 @@
+group,desc
+ABL-S1,source1 only
+ABL-S2,source2 only
+ABL-S3,source3 only
+ABL-S12,source1+2 equal
+ABL-S12-Attn,source1+2 attention
+ABL-Full-Equal,all equal
+ABL-Full-Attn,all attention
