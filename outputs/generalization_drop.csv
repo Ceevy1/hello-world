@@ -1,0 +1,9 @@
+﻿adaptation,model,in_domain_RMSE,cross_domain_RMSE,generalization_drop
+coral,RandomForest,2.7507,74.0071,25.9048
+coral,SVR,9.1755,75.1778,7.1933
+coral,MLP,16.7986,73.1482,3.3544
+coral,DynamicFusion,26.5622,51.5063,0.9391
+none,RandomForest,2.7507,70.5899,24.6625
+none,SVR,9.1755,74.3914,7.1076
+none,MLP,16.799,49.1616,1.9265
+none,DynamicFusion,26.5621,41.1884,0.5506
