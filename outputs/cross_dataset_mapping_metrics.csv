@@ -1,0 +1,13 @@
+﻿train_domain,test_domain,model,accuracy,MAE,RMSE
+SelfDataset,SelfDataset,RandomForest,1.0,1.995,2.5055
+SelfDataset,SelfDataset,MLP,1.0,15.5451,18.942
+SelfDataset,SelfDataset,DynamicFusion,1.0,15.0381,18.2457
+SelfDataset,OULAD,RandomForest,0.0,72.9822,73.4218
+SelfDataset,OULAD,MLP,0.0,21.1267,23.2697
+SelfDataset,OULAD,DynamicFusion,0.0,21.083,23.1402
+OULAD,SelfDataset,RandomForest,0.0,69.3738,69.9519
+OULAD,SelfDataset,MLP,0.0,71.5703,72.1143
+OULAD,SelfDataset,DynamicFusion,0.0,71.4997,72.1373
+OULAD,OULAD,RandomForest,1.0,2.3833,2.9154
+OULAD,OULAD,MLP,1.0,5.9033,7.1928
+OULAD,OULAD,DynamicFusion,1.0,5.9866,7.3011
