@@ -10,6 +10,8 @@ EXPERIMENTS = {
     2: ('实验二：多源消融', 'experiments.exp2_ablation_sources'),
     3: ('实验三：基线对比', 'experiments.exp3_baseline_compare'),
     4: ('实验四：可解释性', 'experiments.exp4_interpretability'),
+    5: ('实验五：小数据鲁棒性', 'experiments.exp5_small_data_robustness'),
+    6: ('实验六：泛化与干预', 'experiments.exp6_generalization_and_intervention'),
 }
 
 

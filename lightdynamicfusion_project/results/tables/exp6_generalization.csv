@@ -1,0 +1,3 @@
+train,test,model,rmse,drop_rate
+student_scores,student_scores,DynamicFusion,0.602639977278443,0.0
+student_scores,shifted_student_scores,DynamicFusion,0.6026483469520088,1.3888347738835248e-05
