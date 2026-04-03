@@ -12,7 +12,8 @@ from src.model.stage_manager import StageManager
 class LightDynamicFusion:
     def __init__(self, stage: str = 'T4', base_estimator: str = 'ridge',
                  use_data_augmentation: bool = True, aug_noise_std: float = 1.5,
-                 aug_multiplier: int = 5, aug_method: str = 'gaussian', random_state: int = 42):
+                 aug_multiplier: int = 5, aug_method: str = 'gaussian', random_state: int = 42,
+                 active_sources=None, use_attention: bool = True):
         self.stage = stage
         self.base_estimator = base_estimator
         self.use_data_augmentation = use_data_augmentation
@@ -20,11 +21,12 @@ class LightDynamicFusion:
         self.aug_multiplier = aug_multiplier
         self.aug_method = aug_method
         self.random_state = random_state
+        self.active_sources = set(active_sources) if active_sources else {'source1', 'source2', 'source3'}
+        self.use_attention = use_attention
 
         self.feature_engineer = FeatureEngineering()
         self.group_predictors = {}
         self.attention_fusion = AttentionFusion()
-        self.scalers = {}
         self.stage_manager = StageManager()
         self.is_fitted = False
 
@@ -41,7 +43,10 @@ class LightDynamicFusion:
                 X, y = mixup_augment(X, y, alpha=0.2, random_state=self.random_state)
 
         group_preds = {}
+        self.group_predictors = {}
         for source, cols in groups.items():
+            if source not in self.active_sources:
+                continue
             cols = [c for c in cols if c in X.columns]
             if not cols:
                 continue
@@ -52,7 +57,7 @@ class LightDynamicFusion:
             self.group_predictors[source] = (cols, scaler, est)
             group_preds[source] = est.predict(Xg)
 
-        self.attention_fusion.fit(group_preds, y, stage)
+        self.attention_fusion.fit(group_preds, y, stage, use_attention=self.use_attention)
         self.is_fitted = True
         return self
 

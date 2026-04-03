@@ -9,8 +9,19 @@ class AttentionFusion:
         self.stage_weights = {}
         self.source_order = ['source1', 'source2', 'source3']
 
-    def fit(self, group_preds: dict, y_true: np.ndarray, stage: str):
+    def fit(self, group_preds: dict, y_true: np.ndarray, stage: str, use_attention: bool = True):
         active = [k for k in self.source_order if k in group_preds]
+        if not active:
+            raise ValueError('No active sources for fusion')
+
+        if not use_attention:
+            full = np.zeros(self.n_sources)
+            equal_w = 1.0 / len(active)
+            for s in active:
+                full[self.source_order.index(s)] = equal_w
+            self.stage_weights[stage] = full
+            return
+
         preds_matrix = np.column_stack([group_preds[k] for k in active])
 
         def objective(weights):
