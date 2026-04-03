@@ -85,9 +85,12 @@ python run_full.py
 python run_lomo.py
 python run_ablation.py
 python run_lambda_search.py
+python experiments/run_oulad_unified_outputs.py --data-dir data --out-dir outputs/unified_oulad
 ```
 
 These scripts generate extended evidence files under `outputs/` including: `main_results.csv`, `lomo_results.csv`, `ablation_results.csv`, `lambda_sensitivity.csv`, `weight_distribution.csv`, `diversity_matrix.csv`, `transfer_distance.csv`, and `shap_rank_correlation.csv`.
+
+`run_oulad_unified_outputs.py` is a one-command launcher that exports the paper-ready experimental artifacts required for OULAD reporting (training curves, early stopping, baseline comparison, ablation, k-fold stability, SHAP top features, error distribution, and early prediction tables).
 
 > Note: this project stores text artifacts only in version control, so loss curves are exported as CSV series in `outputs/loss_curves/*.csv` instead of binary images.
 
