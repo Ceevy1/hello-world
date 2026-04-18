@@ -39,94 +39,6 @@ BASE_FEATURES = [
     "avg_session_length",
 ]
 
-DEFAULT_DATA_DIR = Path("/data")
-DEFAULT_OULAD_CANDIDATES = [
-    "studentInfo.csv",
-    "oulad.csv",
-    "oulad_interactions.csv",
-    "studentvle.csv",
-    "studentVle.csv",
-]
-
-
-def resolve_default_input(input_path: str | None) -> str:
-    if input_path:
-        return input_path
-
-    if DEFAULT_DATA_DIR.exists() and DEFAULT_DATA_DIR.is_dir():
-        csv_files = sorted(DEFAULT_DATA_DIR.glob("*.csv"))
-        if csv_files:
-            return str(DEFAULT_DATA_DIR)
-
-    for name in DEFAULT_OULAD_CANDIDATES:
-        candidate = DEFAULT_DATA_DIR / name
-        if candidate.exists() and candidate.is_file():
-            return str(candidate)
-
-    raise FileNotFoundError(
-        "No input CSV provided and no OULAD CSV found under /data. "
-        "Please place OULAD CSV in /data or pass --input explicitly."
-    )
-
-
-def _read_csv_case_insensitive(base_dir: Path, file_name: str) -> pd.DataFrame:
-    exact = base_dir / file_name
-    if exact.exists():
-        return pd.read_csv(exact)
-
-    lowered = file_name.lower()
-    for candidate in base_dir.glob("*.csv"):
-        if candidate.name.lower() == lowered:
-            return pd.read_csv(candidate)
-
-    raise FileNotFoundError(f"Required OULAD file not found: {file_name} (under {base_dir})")
-
-
-def _build_from_oulad_raw(base_dir: Path) -> pd.DataFrame:
-    student_vle = _read_csv_case_insensitive(base_dir, "studentVle.csv")
-    student_info = _read_csv_case_insensitive(base_dir, "studentInfo.csv")
-    vle = _read_csv_case_insensitive(base_dir, "vle.csv")
-
-    merged = student_vle.merge(vle[["id_site", "activity_type"]], on="id_site", how="left")
-    info_cols = ["id_student", "code_module", "code_presentation", "final_result"]
-    merged = merged.merge(student_info[info_cols], on=["id_student", "code_module", "code_presentation"], how="left")
-
-    out = pd.DataFrame(
-        {
-            "student_id": merged["id_student"],
-            "activity_type": merged["activity_type"].fillna("unknown").astype(str),
-            "week": (merged["date"].fillna(0).astype(float) // 7 + 1).astype(int),
-            "elapsed_time": merged["sum_click"].fillna(0).astype(float),
-            "final_result": merged["final_result"].fillna("Withdrawn").astype(str),
-        }
-    )
-    return out
-
-
-def load_oulad_dataframe(input_path: str) -> pd.DataFrame:
-    path = Path(input_path)
-
-    if path.is_dir():
-        return _build_from_oulad_raw(path)
-
-    df = pd.read_csv(path)
-    normalized = {c.lower(): c for c in df.columns}
-
-    if "final_result" in normalized and "student_id" in normalized:
-        return df
-
-    if "id_student" in normalized and "sum_click" in normalized:
-        return _build_from_oulad_raw(path.parent)
-
-    missing = {"student_id", "activity_type", "week", "final_result"} - set(df.columns)
-    raise ValueError(
-        "Unrecognized input format. "
-        "Expected either processed OULAD columns "
-        "['student_id', 'activity_type', 'week', 'final_result'] "
-        "or raw OULAD files under a directory with studentVle.csv + studentInfo.csv + vle.csv. "
-        f"Missing columns from provided CSV: {sorted(missing)}"
-    )
-
 
 @dataclass
 class TrainConfig:
@@ -198,7 +110,7 @@ def _build_student_week_sequence(df: pd.DataFrame, student_order: List[str], max
 
 
 def prepare_oulad_data(input_csv: str, cfg: TrainConfig) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    raw = load_oulad_dataframe(input_csv)
+    raw = pd.read_csv(input_csv)
     data = preprocess_oulad(raw)
 
     required = {"student_id", "activity_type", "week", "final_result"}
@@ -339,9 +251,8 @@ def _run_torch_model(
     return train_prob, val_prob
 
 
-def run_experiment(input_csv: str | None, output_csv: str, cfg: TrainConfig) -> pd.DataFrame:
-    resolved_input = resolve_default_input(input_csv)
-    x_seq_train, x_seq_val, x_tab_train, x_tab_val, y_train, y_val = prepare_oulad_data(resolved_input, cfg)
+def run_experiment(input_csv: str, output_csv: str, cfg: TrainConfig) -> pd.DataFrame:
+    x_seq_train, x_seq_val, x_tab_train, x_tab_val, y_train, y_val = prepare_oulad_data(input_csv, cfg)
 
     scaler = StandardScaler()
     x_tab_train_scaled = scaler.fit_transform(x_tab_train)
@@ -411,11 +322,7 @@ def run_experiment(input_csv: str | None, output_csv: str, cfg: TrainConfig) -> 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train and validate OULAD models with unified metrics output.")
-    parser.add_argument(
-        "--input",
-        default=None,
-        help="Path to OULAD CSV or raw OULAD directory. Defaults to auto-detect under /data.",
-    )
+    parser.add_argument("--input", required=True, help="Path to OULAD interaction CSV.")
     parser.add_argument("--output", default="outputs/oulad_train_validation_metrics.csv", help="Output CSV for train/validation metrics.")
     parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--random-state", type=int, default=42)
@@ -436,7 +343,5 @@ if __name__ == "__main__":
         learning_rate=args.learning_rate,
         max_weeks=args.max_weeks,
     )
-    resolved_input = resolve_default_input(args.input)
-    print(f"Using input CSV: {resolved_input}")
-    df = run_experiment(resolved_input, args.output, config)
+    df = run_experiment(args.input, args.output, config)
     print(df)
